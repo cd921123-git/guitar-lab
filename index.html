@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>乐句拆解</title>
+<meta name="theme-color" content="#181310">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="乐句拆解">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<style>
+  :root{
+    --bg:#181310; --surface:#221B16; --surface2:#2B221B; --line:#3A2F26;
+    --amber:#E8A33D; --amber-dim:#8A6224; --ink:#F0E7DA; --muted:#9C8D7B;
+    --ok:#7FB069; --warn:#C96F4A;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    font-size:16px;line-height:1.5}
+  .wrap{max-width:560px;margin:0 auto;padding:16px 14px 120px}
+  header{padding:8px 2px 18px}
+  header h1{font-size:22px;font-weight:800;letter-spacing:.06em;margin:0}
+  header h1 span{color:var(--amber)}
+  header p{margin:4px 0 0;font-size:13px;color:var(--muted)}
+  section{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:14px;margin-bottom:14px}
+  .sec-title{display:flex;align-items:baseline;gap:8px;margin-bottom:10px}
+  .sec-num{font-size:13px;font-weight:800;color:var(--amber);letter-spacing:.1em}
+  .sec-name{font-size:16px;font-weight:700}
+  .hint{font-size:12px;color:var(--muted);margin:-6px 0 10px}
+  label.f{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px;letter-spacing:.05em}
+  input[type=text]{width:100%;background:var(--surface2);border:1px solid var(--line);
+    border-radius:10px;color:var(--ink);font-size:16px;padding:12px;outline:none}
+  input[type=text]:focus{border-color:var(--amber-dim)}
+  input[type=date]{background:var(--surface2);border:1px solid var(--line);border-radius:10px;
+    color:var(--ink);font-size:15px;padding:10px;outline:none;-webkit-appearance:none}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{min-height:44px;min-width:44px;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;
+    background:var(--surface2);border:1px solid var(--line);border-radius:10px;
+    color:var(--ink);font-size:15px;font-weight:600;cursor:pointer;user-select:none;
+    transition:background .12s,border-color .12s,color .12s}
+  .chip.on{background:var(--amber);border-color:var(--amber);color:#211703}
+  .chip.util{color:var(--muted);font-weight:500}
+  .chip:active{transform:scale(.97)}
+  .stepper{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .stepper button{width:48px;height:44px;background:var(--surface2);border:none;color:var(--amber);
+    font-size:22px;font-weight:800;cursor:pointer}
+  .stepper .val{min-width:64px;text-align:center;font-size:18px;font-weight:800;background:var(--surface)}
+  .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .bars{display:flex;flex-direction:column;gap:12px}
+  .bar{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:10px 8px 8px;overflow-x:auto}
+  .bar-head{display:flex;justify-content:space-between;align-items:center;margin:0 4px 8px}
+  .bar-head .bn{font-size:12px;color:var(--muted);letter-spacing:.08em}
+  .bar-head .del{font-size:12px;color:var(--warn);background:none;border:none;padding:4px 8px;cursor:pointer}
+  .grid{display:flex;width:max-content}
+  .beatgroup{display:flex;gap:4px;padding:0 5px;border-left:1px solid var(--line)}
+  .beatgroup:first-child{border-left:none}
+  .cellcol{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .cellcol .lab{font-size:11px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;height:14px}
+  .cell{width:38px;height:46px;border-radius:8px;border:1px solid var(--line);
+    background:var(--bg);display:flex;align-items:center;justify-content:center;
+    font-size:18px;font-weight:800;cursor:pointer;user-select:none;color:var(--muted);
+    transition:background .1s,border-color .1s}
+  .cell[data-s="1"]{background:var(--amber);border-color:var(--amber);color:#211703}
+  .cell[data-s="2"]{background:transparent;border:1px dashed var(--amber);color:var(--amber)}
+  .cell:active{transform:scale(.95)}
+  .addbar{width:100%;min-height:46px;border:1px dashed var(--line);border-radius:12px;
+    background:none;color:var(--muted);font-size:15px;cursor:pointer;margin-top:10px}
+  .legend{font-size:12px;color:var(--muted);margin-top:8px;font-family:ui-monospace,Consolas,monospace}
+  .legend b{color:var(--amber)}
+  .seq{min-height:52px;background:var(--bg);border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;font-size:20px;font-weight:800;letter-spacing:.08em;
+    display:flex;align-items:center;flex-wrap:wrap;gap:6px;color:var(--amber)}
+  .seq:empty::before{content:attr(data-empty);color:#5A4E41;font-size:14px;font-weight:400;letter-spacing:0}
+  .seqbtns{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .verdict{display:flex;gap:10px;margin-top:10px}
+  .verdict .chip{flex:1;justify-content:center;min-height:52px}
+  .verdict .chip.ok.on{background:var(--ok);border-color:var(--ok);color:#10200C}
+  .verdict .chip.re.on{background:var(--warn);border-color:var(--warn);color:#2A1006}
+  .savebar{position:fixed;left:0;right:0;bottom:0;padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+    background:linear-gradient(transparent,var(--bg) 30%);display:flex;gap:10px;max-width:560px;margin:0 auto}
+  .savebar button{flex:1;min-height:54px;border-radius:14px;font-size:17px;font-weight:800;cursor:pointer;border:none}
+  #btnSave{background:var(--amber);color:#211703}
+  #btnReset{flex:0 0 96px;background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
+  .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--surface2);
+    border:1px solid var(--amber-dim);color:var(--ink);padding:10px 18px;border-radius:10px;
+    font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s;white-space:nowrap}
+  .toast.show{opacity:1}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>乐句拆解 <span>· 记录器</span></h1>
+    <p>能点的绝不手打。填完按保存，得到一个文本文件。</p>
+  </header>
+
+  <!-- 基本信息 -->
+  <section>
+    <div class="sec-title"><span class="sec-num">基本</span><span class="sec-name">这条乐句</span></div>
+    <div class="row">
+      <div>
+        <label class="f">编号</label>
+        <div class="stepper">
+          <button type="button" id="numMinus">−</button>
+          <div class="val" id="numVal">1</div>
+          <button type="button" id="numPlus">＋</button>
+        </div>
+      </div>
+      <div>
+        <label class="f">日期</label>
+        <input type="date" id="dateVal">
+      </div>
+    </div>
+    <label class="f">来源（歌 / 演奏者 / 大概位置）</label>
+    <input type="text" id="srcVal" placeholder="例：SRV《Pride and Joy》第一段 solo 开头">
+    <label class="f">调</label>
+    <div class="chips" id="keyChips"></div>
+  </section>
+
+  <!-- 和弦序列 -->
+  <section>
+    <div class="sec-title"><span class="sec-num">和弦</span><span class="sec-name">乐句经过的和弦（可多个）</span></div>
+    <p class="hint">点根音 → 点类型 → 按「添加」。按顺序排成序列。</p>
+    <div class="seq" id="chordSeq" data-empty="还没添加和弦"></div>
+    <label class="f">根音</label>
+    <div class="chips" id="chordRootChips"></div>
+    <label class="f">类型</label>
+    <div class="chips" id="chordTypeChips"></div>
+    <div class="seqbtns">
+      <button type="button" class="chip" id="chordAddBtn" style="border-color:var(--amber-dim)">＋ 添加这个和弦</button>
+      <button type="button" class="chip util" id="chordBackBtn">⌫ 退一个</button>
+      <button type="button" class="chip util" id="chordClearBtn">清空</button>
+    </div>
+  </section>
+
+  <!-- 速度 -->
+  <section>
+    <div class="sec-title"><span class="sec-num">速度</span><span class="sec-name">BPM</span></div>
+    <div class="row">
+      <div class="stepper">
+        <button type="button" id="bpmMinus">−</button>
+        <div class="val" id="bpmVal">— —</div>
+        <button type="button" id="bpmPlus">＋</button>
+      </div>
+      <span class="hint" style="margin:0">± 5 微调</span>
+    </div>
+    <label class="f">常用速度直接点</label>
+    <div class="chips" id="bpmChips"></div>
+  </section>
+
+  <!-- 拍号 -->
+  <section>
+    <div class="sec-title"><span class="sec-num">拍号</span><span class="sec-name">决定节奏格的样子</span></div>
+    <div class="chips" id="tsChips"></div>
+  </section>
+
+  <!-- 落音 -->
+  <section>
+    <div class="sec-title"><span class="sec-num">落音</span><span class="sec-name">最后一个音</span></div>
+    <p class="hint">它相对落点所在的和弦是几度？（离线慢慢数）</p>
+    <label class="f">音名</label>
+    <div class="chips" id="landNoteChips"></div>
+    <label class="f">相对和弦度数</label>
+    <div class="chips" id="degreeChips"></div>
+  </section>
+
+  <!-- 节奏 -->
+  <section>
+    <div class="sec-title"><span class="sec-num">节奏</span><span class="sec-name">拨弦位置</span></div>
+    <p class="hint">音高全扔掉。点格子循环切换：空 → 拨弦 → 延续。</p>
+    <div class="bars" id="barsBox"></div>
+    <button type="button" class="addbar" id="addBarBtn">＋ 加一小节</button>
+    <div class="legend">实心 = <b>x</b> 拨弦 ・ 虚框 = <b>—</b> 音延续 ・ 暗格 = 空</div>
+  </section>
+
+  <!-- 走向 -->
+  <section>
+    <div class="sec-title"><span class="sec-num">走向</span><span class="sec-name">音的走势</span></div>
+    <div class="seq" id="dirSeq" data-empty="点箭头拼出来，三四个就够"></div>
+    <div class="seqbtns">
+      <button type="button" class="chip" id="dirUpBtn">↑ 上行</button>
+      <button type="button" class="chip" id="dirDownBtn">↓ 下行</button>
+      <button type="button" class="chip" id="dirFlatBtn">→ 平走</button>
+      <button type="button" class="chip util" id="dirBackBtn">⌫ 退一步</button>
+      <button type="button" class="chip util" id="dirClearBtn">清空</button>
+    </div>
+  </section>
+
+  <!-- 骨架 -->
+  <section>
+    <div class="sec-title"><span class="sec-num">骨架</span><span class="sec-name">剥完剩下的音（≤ 4 个为宜）</span></div>
+    <div class="seq" id="skelSeq" data-empty="点下面的音名，按顺序排"></div>
+    <div class="chips" id="skelChips" style="margin-top:8px"></div>
+    <div class="seqbtns">
+      <button type="button" class="chip util" id="skelBackBtn">⌫ 退一个</button>
+      <button type="button" class="chip util" id="skelClearBtn">清空</button>
+    </div>
+  </section>
+
+  <!-- 验证 -->
+  <section>
+    <div class="sec-title"><span class="sec-num">验证</span><span class="sec-name">拿到伴奏上现编五句</span></div>
+    <p class="hint">骨架不变：换节奏、换落音时值、换力度、上行改下行。没有一句是原句。</p>
+    <div class="chips" id="verChips"></div>
+    <div class="verdict">
+      <button type="button" class="chip ok" id="vOk">✓ 拆到骨头，归入骨架本</button>
+      <button type="button" class="chip re" id="vRe">↩ 装饰没剥净，回炉</button>
+    </div>
+  </section>
+</div>
+
+<div class="savebar">
+  <button id="btnReset" type="button">清空</button>
+  <button id="btnSave" type="button">保存为文本文件</button>
+</div>
+<div class="toast" id="toast">已生成文件</div>
+
+<script>
+"use strict";
+/* ---------------- 数据 ---------------- */
+const NOTES = ["C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B"];
+const CHORD_TYPES = ["7","9","13","m7","maj7","m","大三","sus4","dim","其他"];
+const DEGREES = ["1","b2","2","b3","3","4","b5","5","b6","6","b7","7"];
+const BPM_PRESETS = [60,70,80,90,100,110,120,130,140,160];
+const TS = [
+  { id:"24_8",  label:"2/4 八分",   beats:2, per:2, labs:["","&"] },
+  { id:"34_8",  label:"3/4 八分",   beats:3, per:2, labs:["","&"] },
+  { id:"44_8",  label:"4/4 八分",   beats:4, per:2, labs:["","&"] },
+  { id:"44_16", label:"4/4 十六分", beats:4, per:4, labs:["","e","&","a"] },
+  { id:"44_3",  label:"4/4 三连音", beats:4, per:3, labs:["","·","·"] },
+  { id:"68",    label:"6/8",        beats:2, per:3, labs:["","·","·"] },
+  { id:"98",    label:"9/8",        beats:3, per:3, labs:["","·","·"] },
+  { id:"128",   label:"12/8 shuffle", beats:4, per:3, labs:["","·","·"] }
+];
+
+const S = {
+  num:1, date:"", src:"", key:null,
+  chordRoot:null, chordType:null, chords:[],
+  bpm:null,
+  ts:"44_8",
+  landNote:null, degree:null,
+  bars:[], dir:[], skel:[],
+  ver:[false,false,false,false,false], verdict:null
+};
+
+/* ---------------- 通用 chip 组 ---------------- */
+function renderChips(boxId, items, getSel, setSel){
+  const box = document.getElementById(boxId);
+  box.innerHTML = "";
+  items.forEach(it=>{
+    const b = document.createElement("button");
+    b.type="button"; b.className="chip"+(getSel()===it?" on":"");
+    b.textContent = it;
+    b.onclick = ()=>{ setSel(getSel()===it?null:it); renderChips(boxId,items,getSel,setSel); };
+    box.appendChild(b);
+  });
+}
+
+/* ---------------- 基本 ---------------- */
+function stepNum(d){ S.num=Math.max(1,S.num+d); document.getElementById("numVal").textContent=S.num; }
+function initDate(){
+  const t=new Date(), p=n=>String(n).padStart(2,"0");
+  const v=`${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
+  document.getElementById("dateVal").value=v; S.date=v;
+}
+document.addEventListener("input",e=>{
+  if(e.target.id==="dateVal") S.date=e.target.value;
+  if(e.target.id==="srcVal") S.src=e.target.value;
+});
+function drawKey(){ renderChips("keyChips",NOTES,()=>S.key,v=>{S.key=v; if(v&&S.chordRoot===null){S.chordRoot=v;drawChordRoot();}}); }
+
+/* ---------------- 和弦序列 ---------------- */
+function drawChordRoot(){ renderChips("chordRootChips",NOTES,()=>S.chordRoot,v=>S.chordRoot=v); }
+function drawChordType(){ renderChips("chordTypeChips",CHORD_TYPES,()=>S.chordType,v=>S.chordType=v); }
+function chordName(){
+  if(!S.chordRoot) return null;
+  let t=S.chordType;
+  if(!t||t==="大三") t="";
+  if(t==="其他") t="?";
+  return S.chordRoot+t;
+}
+function chordAdd(){
+  const c=chordName();
+  if(!c) return;
+  if(S.chords.length<8){ S.chords.push(c); drawChordSeq(); }
+}
+function chordBack(){ S.chords.pop(); drawChordSeq(); }
+function chordClear(){ S.chords=[]; drawChordSeq(); }
+function drawChordSeq(){ document.getElementById("chordSeq").textContent=S.chords.join(" → "); }
+
+/* ---------------- 速度 ---------------- */
+function stepBpm(d){
+  S.bpm = S.bpm===null ? (d>0?60:60) : Math.min(300,Math.max(30,S.bpm+d));
+  drawBpm();
+}
+function drawBpm(){
+  document.getElementById("bpmVal").textContent = S.bpm===null?"— —":S.bpm;
+  const box=document.getElementById("bpmChips"); box.innerHTML="";
+  BPM_PRESETS.forEach(v=>{
+    const b=document.createElement("button"); b.type="button";
+    b.className="chip"+(S.bpm===v?" on":"");
+    b.textContent=v;
+    b.onclick=()=>{ S.bpm = S.bpm===v?null:v; drawBpm(); };
+    box.appendChild(b);
+  });
+}
+
+/* ---------------- 拍号 / 节奏格 ---------------- */
+function tsObj(){ return TS.find(t=>t.id===S.ts); }
+function drawTS(){
+  const box=document.getElementById("tsChips"); box.innerHTML="";
+  TS.forEach(t=>{
+    const b=document.createElement("button");
+    b.type="button"; b.className="chip"+(S.ts===t.id?" on":"");
+    b.textContent=t.label;
+    b.onclick=()=>{ if(S.ts!==t.id){ S.ts=t.id; S.bars=[newBar()]; drawTS(); drawBars(); } };
+    box.appendChild(b);
+  });
+}
+function newBar(){ const t=tsObj(); return Array(t.beats*t.per).fill(0); }
+function addBar(){ if(S.bars.length<8){ S.bars.push(newBar()); drawBars(); } }
+function delBar(i){ if(S.bars.length>1){ S.bars.splice(i,1); drawBars(); } }
+function drawBars(){
+  const t=tsObj(), box=document.getElementById("barsBox");
+  box.innerHTML="";
+  S.bars.forEach((bar,bi)=>{
+    const d=document.createElement("div"); d.className="bar";
+    const h=document.createElement("div"); h.className="bar-head";
+    h.innerHTML=`<span class="bn">第 ${bi+1} 小节</span>`;
+    if(S.bars.length>1){
+      const del=document.createElement("button"); del.className="del"; del.type="button";
+      del.textContent="删除"; del.onclick=()=>delBar(bi); h.appendChild(del);
+    }
+    d.appendChild(h);
+    const g=document.createElement("div"); g.className="grid";
+    for(let beat=0;beat<t.beats;beat++){
+      const bg=document.createElement("div"); bg.className="beatgroup";
+      for(let s=0;s<t.per;s++){
+        const idx=beat*t.per+s;
+        const col=document.createElement("div"); col.className="cellcol";
+        const lab=document.createElement("div"); lab.className="lab";
+        lab.textContent = s===0 ? String(beat+1) : t.labs[s];
+        const c=document.createElement("button"); c.type="button"; c.className="cell";
+        c.dataset.s=bar[idx];
+        c.textContent = bar[idx]===1?"x":bar[idx]===2?"—":"·";
+        c.onclick=()=>{ bar[idx]=(bar[idx]+1)%3; c.dataset.s=bar[idx];
+          c.textContent = bar[idx]===1?"x":bar[idx]===2?"—":"·"; };
+        col.appendChild(lab); col.appendChild(c); bg.appendChild(col);
+      }
+      g.appendChild(bg);
+    }
+    d.appendChild(g); box.appendChild(d);
+  });
+}
+
+/* ---------------- 走向 / 骨架 ---------------- */
+function dirAdd(a){ if(S.dir.length<8){ S.dir.push(a); drawDir(); } }
+function dirBack(){ S.dir.pop(); drawDir(); }
+function dirClear(){ S.dir=[]; drawDir(); }
+function drawDir(){ document.getElementById("dirSeq").textContent=S.dir.join(" "); }
+
+function skelAdd(n){ if(S.skel.length<6){ S.skel.push(n); drawSkel(); } }
+function skelBack(){ S.skel.pop(); drawSkel(); }
+function skelClear(){ S.skel=[]; drawSkel(); }
+function drawSkel(){ document.getElementById("skelSeq").textContent=S.skel.join(" — "); }
+function drawSkelChips(){
+  const box=document.getElementById("skelChips"); box.innerHTML="";
+  NOTES.forEach(n=>{
+    const b=document.createElement("button"); b.type="button"; b.className="chip";
+    b.textContent=n; b.onclick=()=>skelAdd(n); box.appendChild(b);
+  });
+}
+
+/* ---------------- 验证 ---------------- */
+function drawVer(){
+  const box=document.getElementById("verChips"); box.innerHTML="";
+  for(let i=0;i<5;i++){
+    const b=document.createElement("button"); b.type="button";
+    b.className="chip"+(S.ver[i]?" on":"");
+    b.textContent="句 "+(i+1)+(S.ver[i]?" ✓":"");
+    b.onclick=()=>{ S.ver[i]=!S.ver[i]; drawVer(); };
+    box.appendChild(b);
+  }
+}
+function setVerdict(v){
+  S.verdict = S.verdict===v?null:v;
+  document.getElementById("vOk").classList.toggle("on",S.verdict==="ok");
+  document.getElementById("vRe").classList.toggle("on",S.verdict==="re");
+}
+
+/* ---------------- 保存为文本 ---------------- */
+function pad(s,w){ s=String(s); while(s.length<w) s+=" "; return s; }
+function snapshotTXT(){
+  const t=tsObj();
+  const L=[];
+  L.push("══════════════════════════════════");
+  L.push(`乐句 No.${S.num} 拆解记录`);
+  L.push("══════════════════════════════════");
+  L.push(`日期    ${S.date||"__"}`);
+  L.push(`来源    ${S.src||"__"}`);
+  L.push(`调      ${S.key||"__"}`);
+  L.push(`和弦    ${S.chords.length?S.chords.join(" → "):"__"}`);
+  L.push(`速度    ${S.bpm!==null?"BPM "+S.bpm:"__"}`);
+  L.push(`拍号    ${t.label}`);
+  L.push("");
+  L.push("── 落音 ──────────────────────────");
+  L.push(`音名 ${S.landNote||"__"} ・ 相对和弦 ${S.degree||"__"} 度`);
+  L.push("");
+  L.push("── 节奏（x=拨弦 —=延续 ·=空）─────");
+  S.bars.forEach((bar,bi)=>{
+    L.push(`第 ${bi+1} 小节`);
+    let labRow="拍: ", valRow="记: ";
+    for(let beat=0;beat<t.beats;beat++){
+      for(let s=0;s<t.per;s++){
+        const lab = s===0?String(beat+1):(t.labs[s]||"·");
+        labRow+=pad(lab,3);
+        const v=bar[beat*t.per+s];
+        valRow+=pad(v===1?"x":v===2?"—":"·",3);
+      }
+      labRow+=" "; valRow+=" ";
+    }
+    L.push(labRow); L.push(valRow); L.push("");
+  });
+  L.push("── 走向 ──────────────────────────");
+  L.push(S.dir.join(" ")||"__");
+  L.push("");
+  L.push("── 骨架 ──────────────────────────");
+  L.push(S.skel.join(" — ")||"__");
+  L.push("");
+  L.push("── 验证：现编五句 ─────────────────");
+  L.push(S.ver.map((v,i)=>`句${i+1}${v?"✓":"✗"}`).join("  "));
+  L.push(`结论：${S.verdict==="ok"?"拆到骨头，归入骨架本":S.verdict==="re"?"装饰没剥净，回炉":"（未判定）"}`);
+  L.push("══════════════════════════════════");
+  return L.join("\n");
+}
+function saveFile(){
+  const txt=snapshotTXT();
+  const blob=new Blob(["\uFEFF"+txt],{type:"text/plain;charset=utf-8"});
+  const a=document.createElement("a");
+  const d=(S.date||"").replace(/-/g,"");
+  a.href=URL.createObjectURL(blob);
+  a.download=`乐句No${S.num}_${S.key||"X"}调_${d}.txt`;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},800);
+  const tst=document.getElementById("toast");
+  tst.textContent=`已生成：乐句No${S.num}.txt`; tst.classList.add("show");
+  setTimeout(()=>tst.classList.remove("show"),2200);
+}
+let resetArmed=null;
+function resetAll(){
+  const btn=document.getElementById("btnReset");
+  if(resetArmed===null){
+    btn.textContent="再按一次确认";
+    btn.style.color="var(--warn)";
+    resetArmed=setTimeout(()=>{btn.textContent="清空";btn.style.color="";resetArmed=null;},3000);
+    return;
+  }
+  clearTimeout(resetArmed); resetArmed=null;
+  btn.textContent="清空"; btn.style.color="";
+  const keepNum=S.num+1;
+  S.src=""; S.key=null; S.chordRoot=null; S.chordType=null; S.chords=[];
+  S.bpm=null; S.landNote=null; S.degree=null;
+  S.bars=[newBar()]; S.dir=[]; S.skel=[];
+  S.ver=[false,false,false,false,false]; S.verdict=null;
+  S.num=keepNum;
+  document.getElementById("numVal").textContent=S.num;
+  document.getElementById("srcVal").value="";
+  drawAll();
+}
+function drawAll(){
+  drawKey(); drawChordRoot(); drawChordType(); drawChordSeq(); drawBpm();
+  drawTS(); drawBars(); drawDir(); drawSkel(); drawSkelChips(); drawVer();
+  document.getElementById("vOk").classList.toggle("on",S.verdict==="ok");
+  document.getElementById("vRe").classList.toggle("on",S.verdict==="re");
+  renderChips("landNoteChips",NOTES,()=>S.landNote,v=>S.landNote=v);
+  renderChips("degreeChips",DEGREES,()=>S.degree,v=>S.degree=v);
+}
+/* ---------------- 事件绑定（不用内联属性，兼容所有手机环境） ---------------- */
+function bind(id,fn){ const el=document.getElementById(id); if(el) el.addEventListener("click",fn); }
+bind("numMinus",()=>stepNum(-1));  bind("numPlus",()=>stepNum(1));
+bind("bpmMinus",()=>stepBpm(-5));  bind("bpmPlus",()=>stepBpm(5));
+bind("chordAddBtn",chordAdd); bind("chordBackBtn",chordBack); bind("chordClearBtn",chordClear);
+bind("addBarBtn",addBar);
+bind("dirUpBtn",()=>dirAdd("↑")); bind("dirDownBtn",()=>dirAdd("↓")); bind("dirFlatBtn",()=>dirAdd("→"));
+bind("dirBackBtn",dirBack); bind("dirClearBtn",dirClear);
+bind("skelBackBtn",skelBack); bind("skelClearBtn",skelClear);
+bind("vOk",()=>setVerdict("ok")); bind("vRe",()=>setVerdict("re"));
+bind("btnSave",saveFile); bind("btnReset",resetAll);
+
+/* ---------------- init ---------------- */
+S.bars=[newBar()];
+initDate();
+drawAll();
+</script>
+</body>
+</html>
