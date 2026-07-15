@@ -212,6 +212,37 @@
     background:transparent;color:var(--body)}
   .review.clear{text-align:center}
   .review.clear .t{display:block;margin-bottom:3px}
+
+  /* ---------- 筛选 · 统计(阶段4) ---------- */
+  .fbar{background:var(--surface);border:1px solid var(--line-soft);border-radius:14px;
+    padding:12px 12px 10px;margin-bottom:16px}
+  .fbar-hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;user-select:none}
+  .fbar-hd .t{font-size:14px;font-weight:800;color:var(--ink);flex:1}
+  .fbar-hd .n{font-size:12px;font-weight:700;color:var(--amber);font-variant-numeric:tabular-nums}
+  .fbar-hd .caret{font-size:12px;color:var(--muted);transition:transform .2s}
+  .fbar.collapsed .caret{transform:rotate(-90deg)}
+  .fbar.collapsed .fbar-body{display:none}
+  .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .fcell label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600}
+  .fsel,.fsrc{width:100%;box-sizing:border-box;min-height:40px;background:var(--well);
+    border:1px solid var(--line);border-radius:9px;color:var(--ink);font-size:14px;
+    font-family:inherit;padding:0 10px;-webkit-appearance:none;appearance:none}
+  .fsel{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+    background-position:calc(100% - 16px) 17px,calc(100% - 11px) 17px;background-size:5px 5px,5px 5px;
+    background-repeat:no-repeat;padding-right:28px}
+  .fsrc{padding:0 10px;line-height:40px}
+  .fcell.wide{grid-column:1 / -1}
+  .fclear{margin-top:10px;width:100%;min-height:38px;border-radius:9px;font-size:13px;font-weight:700;
+    font-family:inherit;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--body)}
+  .fclear:active{transform:scale(.98)}
+  .stats-title{font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 8px}
+  .stat-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .stat-row .lab{flex:none;width:34px;font-size:12px;font-weight:700;color:var(--ink);
+    text-align:right;font-variant-numeric:tabular-nums}
+  .stat-row .track{flex:1;height:16px;background:var(--well);border-radius:8px;overflow:hidden}
+  .stat-row .fill{height:100%;background:var(--amber);border-radius:8px;min-width:2px;transition:width .3s}
+  .stat-row .cnt{flex:none;width:24px;font-size:12px;color:var(--body);font-variant-numeric:tabular-nums}
+  .stats-empty{font-size:12.5px;color:var(--muted)}
   .libcount{font-size:12px;color:var(--muted);margin:0 2px 10px}
   .card{background:var(--surface);border:1px solid var(--line-soft);border-radius:14px;
     padding:14px;margin-bottom:12px}
@@ -506,6 +537,7 @@
   <!-- ================= 乐句库视图 ================= -->
   <div class="view" id="viewLib">
     <div id="reviewPanel"></div>
+    <div id="filterBar"></div>
     <div class="libtools">
       <button type="button" class="chip" id="btnExportAll">导出备份</button>
       <button type="button" class="chip" id="btnImport">导入备份</button>
@@ -1053,6 +1085,174 @@ async function renderReview(){
   box.appendChild(panel);
 }
 
+/* ================================================================
+   阶段4·筛选 + 统计
+   - 按 调 / 和弦 / 落音度数 / 判定 筛选,来源关键词搜索
+   - 选项从库内实际出现的值动态生成;统计落音度数分布(随筛选联动)
+   ================================================================ */
+const libFilter = { key:"", chord:"", degree:"", verdict:"", src:"" };
+function filterActive(){
+  return libFilter.key||libFilter.chord||libFilter.degree||libFilter.verdict||libFilter.src.trim();
+}
+function applyFilter(all){
+  const q = libFilter.src.trim().toLowerCase();
+  return all.filter(r=>{
+    if(libFilter.key && r.key !== libFilter.key) return false;
+    if(libFilter.degree && r.degree !== libFilter.degree) return false;
+    if(libFilter.verdict){
+      const v = r.verdict || "wip";
+      if(v !== libFilter.verdict) return false;
+    }
+    if(libFilter.chord && !(Array.isArray(r.chords) && r.chords.includes(libFilter.chord))) return false;
+    if(q && !((r.src||"").toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+function uniqSorted(arr, order){
+  const set = [...new Set(arr.filter(Boolean))];
+  if(order) set.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+  else set.sort();
+  return set;
+}
+function renderFilterBar(all){
+  const box = document.getElementById("filterBar");
+  if(!box) return;
+  const keys = uniqSorted(all.map(r=>r.key), NOTES);
+  const degs = uniqSorted(all.map(r=>r.degree), DEGREES);
+  const chords = uniqSorted([].concat(...all.map(r=>Array.isArray(r.chords)?r.chords:[])));
+  const collapsed = box.dataset.collapsed === "1";
+  const activeN = [libFilter.key,libFilter.chord,libFilter.degree,libFilter.verdict,libFilter.src.trim()].filter(Boolean).length;
+
+  const opt = (val, cur, label)=>`<option value="${val}"${val===cur?" selected":""}>${label||val}</option>`;
+  const sel = (id, cur, items, allLabel)=>
+    `<select class="fsel" id="${id}">${opt("",cur,allLabel)}${items.map(v=>opt(v,cur)).join("")}</select>`;
+
+  box.className = "fbar" + (collapsed ? " collapsed" : "");
+  box.innerHTML =
+    `<div class="fbar-hd" id="fbarToggle">
+       <span class="t">筛选 · 统计</span>
+       ${activeN?`<span class="n">${activeN} 个筛选</span>`:""}
+       <span class="caret">▾</span>
+     </div>
+     <div class="fbar-body">
+       <div class="fgrid">
+         <div class="fcell"><label>调</label>${sel("fKey",libFilter.key,keys,"全部")}</div>
+         <div class="fcell"><label>落音度数</label>${sel("fDeg",libFilter.degree,degs,"全部")}</div>
+         <div class="fcell"><label>和弦</label>${sel("fChord",libFilter.chord,chords,"全部")}</div>
+         <div class="fcell"><label>判定</label>
+           <select class="fsel" id="fVer">
+             ${opt("",libFilter.verdict,"全部")}
+             <option value="ok"${libFilter.verdict==="ok"?" selected":""}>骨架本</option>
+             <option value="re"${libFilter.verdict==="re"?" selected":""}>回炉</option>
+             <option value="wip"${libFilter.verdict==="wip"?" selected":""}>进行中</option>
+           </select>
+         </div>
+         <div class="fcell wide"><label>来源关键词</label>
+           <input type="text" class="fsrc" id="fSrc" value="${(libFilter.src||"").replace(/"/g,"&quot;")}"
+             placeholder="搜歌名 / 演奏者…" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+       </div>
+       ${filterActive()?`<button type="button" class="fclear" id="fClear">清除筛选</button>`:""}
+       <div id="statsBox"></div>
+     </div>`;
+
+  document.getElementById("fbarToggle").onclick = ()=>{
+    box.dataset.collapsed = collapsed ? "0" : "1";
+    box.classList.toggle("collapsed");
+  };
+  const on = (id, key, ev)=>{
+    const el = document.getElementById(id); if(!el) return;
+    el.addEventListener(ev, ()=>{ libFilter[key] = el.value; renderLib(); });
+  };
+  on("fKey","key","change"); on("fDeg","degree","change");
+  on("fChord","chord","change"); on("fVer","verdict","change");
+  const src = document.getElementById("fSrc");
+  if(src) src.addEventListener("input", ()=>{ libFilter.src = src.value; renderLibDebounced(); });
+  const clr = document.getElementById("fClear");
+  if(clr) clr.onclick = ()=>{
+    libFilter.key=libFilter.chord=libFilter.degree=libFilter.verdict=libFilter.src="";
+    renderLib();
+  };
+}
+let _libDeb = null;
+function renderLibDebounced(){ clearTimeout(_libDeb); _libDeb = setTimeout(renderLib, 200); }
+
+function renderStats(shown){
+  const box = document.getElementById("statsBox");
+  if(!box) return;
+  const withDeg = shown.filter(r=>r.degree);
+  if(!withDeg.length){
+    box.innerHTML = `<div class="stats-title">落音度数分布</div>`
+      + `<div class="stats-empty">当前范围内还没有记录落音度数的乐句。</div>`;
+    return;
+  }
+  const counts = {};
+  withDeg.forEach(r=>{ counts[r.degree] = (counts[r.degree]||0)+1; });
+  const present = DEGREES.filter(d=>counts[d]);
+  const max = Math.max(...present.map(d=>counts[d]));
+  let rows = present.map(d=>{
+    const c = counts[d], w = Math.round(c/max*100);
+    return `<div class="stat-row"><span class="lab">${d}</span>`
+      + `<span class="track"><span class="fill" style="width:${w}%"></span></span>`
+      + `<span class="cnt">${c}</span></div>`;
+  }).join("");
+  box.innerHTML = `<div class="stats-title">落音度数分布 · 共 ${withDeg.length} 条</div>${rows}`;
+}
+
+function libCardEl(rec){
+  const c = document.createElement("div"); c.className="card";
+  const top = document.createElement("div"); top.className="card-top";
+  const no = document.createElement("span"); no.className="no"; no.textContent = `No.${rec.num||"?"}`;
+  const key = document.createElement("span"); key.className="key";
+  key.textContent = rec.key ? `${rec.key} 调` : "未定调";
+  const flex = document.createElement("span"); flex.className="flex";
+  const badge = document.createElement("span");
+  if(rec.verdict==="ok"){ badge.className="badge ok"; badge.textContent="骨架本"; }
+  else if(rec.verdict==="re"){ badge.className="badge re"; badge.textContent="回炉"; }
+  else { badge.className="badge wip"; badge.textContent="进行中"; }
+  top.appendChild(no); top.appendChild(key); top.appendChild(flex); top.appendChild(badge);
+  c.appendChild(top);
+
+  const src = document.createElement("div"); src.className="src";
+  src.textContent = rec.src || "(未填来源)";
+  c.appendChild(src);
+
+  const meta = document.createElement("div"); meta.className="meta";
+  const chords = (rec.chords&&rec.chords.length) ? rec.chords.join("→")+" · " : "";
+  const deg = rec.degree ? `落 ${rec.degree}度 · ` : "";
+  meta.textContent = `${chords}${deg}${rec.bpm?("BPM "+rec.bpm+" · "):""}更新 ${fmtDate(rec.updatedAt||rec.createdAt||Date.now())}`;
+  c.appendChild(meta);
+
+  const btns = document.createElement("div"); btns.className="card-btns";
+  const bOpen = document.createElement("button"); bOpen.type="button"; bOpen.textContent="打开编辑";
+  bOpen.onclick = ()=>loadRecord(rec);
+  const bCopy = document.createElement("button"); bCopy.type="button"; bCopy.textContent="复制";
+  bCopy.onclick = async ()=>{
+    const n = await maxNum();
+    const dup = Object.assign({}, rec, { id:newId(), num:n+1, createdAt:Date.now(), updatedAt:Date.now() });
+    delete dup.lastReview;
+    await dbPut(dup);
+    toast(`已复制为 No.${dup.num}`);
+    renderLib();
+  };
+  const bDel = document.createElement("button"); bDel.type="button"; bDel.className="danger"; bDel.textContent="删除";
+  let armed = null;
+  bDel.onclick = async ()=>{
+    if(armed===null){
+      bDel.textContent = "确认删除?";
+      armed = setTimeout(()=>{ bDel.textContent="删除"; armed=null; }, 3000);
+      return;
+    }
+    clearTimeout(armed);
+    await dbDel(rec.id);
+    toast(`已删除 No.${rec.num}`);
+    if(rec.id===currentId){ await startFresh(); }
+    renderLib();
+  };
+  btns.appendChild(bOpen); btns.appendChild(bCopy); btns.appendChild(bDel);
+  c.appendChild(btns);
+  return c;
+}
+
 async function renderLib(){
   renderReview();
   const list = document.getElementById("libList");
@@ -1060,68 +1260,33 @@ async function renderLib(){
   const dueN = all.filter(isDue).length;
   const flag = document.getElementById("dueFlag");
   if(flag){ flag.textContent = dueN; flag.classList.toggle("show", dueN>0); }
-  document.getElementById("libCount").textContent =
-    all.length ? `共 ${all.length} 条 · 数据存在本机,定期「导出备份」更安心` : "";
-  list.innerHTML = "";
+
+  const fbar = document.getElementById("filterBar");
   if(!all.length){
+    if(fbar) fbar.innerHTML = "";
+    document.getElementById("libCount").textContent = "";
+    list.innerHTML = "";
     const e = document.createElement("div"); e.className="empty";
     e.innerHTML = `<svg viewBox="0 0 404.19 445.97"><use href="#mark"/></svg><br>库是空的。去「记录」页拆第一条乐句,它会自动出现在这里。`;
     list.appendChild(e);
     return;
   }
-  all.forEach(rec=>{
-    const c = document.createElement("div"); c.className="card";
+  renderFilterBar(all);
+  const shown = applyFilter(all);
+  renderStats(shown);
 
-    const top = document.createElement("div"); top.className="card-top";
-    const no = document.createElement("span"); no.className="no"; no.textContent = `No.${rec.num||"?"}`;
-    const key = document.createElement("span"); key.className="key";
-    key.textContent = rec.key ? `${rec.key} 调` : "未定调";
-    const flex = document.createElement("span"); flex.className="flex";
-    const badge = document.createElement("span");
-    if(rec.verdict==="ok"){ badge.className="badge ok"; badge.textContent="骨架本"; }
-    else if(rec.verdict==="re"){ badge.className="badge re"; badge.textContent="回炉"; }
-    else { badge.className="badge wip"; badge.textContent="进行中"; }
-    top.appendChild(no); top.appendChild(key); top.appendChild(flex); top.appendChild(badge);
-    c.appendChild(top);
+  document.getElementById("libCount").textContent = filterActive()
+    ? `筛选出 ${shown.length} / ${all.length} 条`
+    : `共 ${all.length} 条 · 数据存在本机,定期「导出备份」更安心`;
 
-    const src = document.createElement("div"); src.className="src";
-    src.textContent = rec.src || "(未填来源)";
-    c.appendChild(src);
-
-    const meta = document.createElement("div"); meta.className="meta";
-    const chords = (rec.chords&&rec.chords.length) ? rec.chords.join("→")+" · " : "";
-    meta.textContent = `${chords}${rec.bpm?("BPM "+rec.bpm+" · "):""}更新 ${fmtDate(rec.updatedAt||rec.createdAt||Date.now())}`;
-    c.appendChild(meta);
-
-    const btns = document.createElement("div"); btns.className="card-btns";
-    const bOpen = document.createElement("button"); bOpen.type="button"; bOpen.textContent="打开编辑";
-    bOpen.onclick = ()=>loadRecord(rec);
-    const bCopy = document.createElement("button"); bCopy.type="button"; bCopy.textContent="复制";
-    bCopy.onclick = async ()=>{
-      const n = await maxNum();
-      const dup = Object.assign({}, rec, { id:newId(), num:n+1, createdAt:Date.now(), updatedAt:Date.now() });
-      await dbPut(dup);
-      toast(`已复制为 No.${dup.num}`);
-      renderLib();
-    };
-    const bDel = document.createElement("button"); bDel.type="button"; bDel.className="danger"; bDel.textContent="删除";
-    let armed = null;
-    bDel.onclick = async ()=>{
-      if(armed===null){
-        bDel.textContent = "确认删除?";
-        armed = setTimeout(()=>{ bDel.textContent="删除"; armed=null; }, 3000);
-        return;
-      }
-      clearTimeout(armed);
-      await dbDel(rec.id);
-      toast(`已删除 No.${rec.num}`);
-      if(rec.id===currentId){ await startFresh(); }
-      renderLib();
-    };
-    btns.appendChild(bOpen); btns.appendChild(bCopy); btns.appendChild(bDel);
-    c.appendChild(btns);
-    list.appendChild(c);
-  });
+  list.innerHTML = "";
+  if(!shown.length){
+    const e = document.createElement("div"); e.className="empty";
+    e.innerHTML = `没有符合筛选条件的乐句。<br>换个条件,或点上方「清除筛选」。`;
+    list.appendChild(e);
+    return;
+  }
+  shown.forEach(rec=>list.appendChild(libCardEl(rec)));
 }
 
 /* ---------------- 备份导出 / 导入 ---------------- */
