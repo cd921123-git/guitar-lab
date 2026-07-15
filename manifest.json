@@ -1,0 +1,14 @@
+{
+  "name": "乐句拆解",
+  "short_name": "乐句拆解",
+  "description": "吉他乐句拆解记录器 · Room for the asterisks",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F0EDE3",
+  "theme_color": "#F0EDE3",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
