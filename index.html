@@ -212,6 +212,30 @@
     transition:opacity .25s ease,transform .25s ease;z-index:50;max-width:86vw;text-align:center}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+  /* ---------- 阶段2:节奏播放 ---------- */
+  .transport{margin-top:14px;padding-top:12px;border-top:1px solid var(--line-soft)}
+  .tp-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .tp-row + .tp-row{margin-top:10px}
+  .tp-play{min-height:46px;padding:0 22px;border-radius:11px;border:1px solid var(--amber);
+    background:var(--amber);color:var(--on-anchor);font-size:15.5px;font-weight:700;
+    cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:7px;
+    transition:filter .15s}
+  .tp-play:active{transform:scale(.97)}
+  .tp-play.on{filter:brightness(.94)}
+  .tp-play .ic{font-size:13px}
+  .tp-toggle{min-height:46px;padding:0 16px;border-radius:11px;border:1px solid var(--line);
+    background:transparent;color:var(--body);font-size:14.5px;font-weight:600;
+    cursor:pointer;font-family:inherit;transition:background .15s,color .15s,border-color .15s}
+  .tp-toggle.on{background:var(--royal);border-color:var(--royal);color:var(--on-royal)}
+  .tp-toggle:active{transform:scale(.97)}
+  .tp-bpm{margin-left:auto;font-size:14px;font-weight:700;color:var(--muted);
+    font-variant-numeric:tabular-nums;letter-spacing:.02em;white-space:nowrap}
+  .tp-speedrow{gap:8px}
+  .tp-cap{font-size:12px;color:var(--muted);letter-spacing:.05em;flex:none}
+  .speedchips{flex:1;gap:6px}
+  .speedchips .chip{min-width:0;padding:0 12px;min-height:40px;font-size:14px}
+  .cell.playing{box-shadow:inset 0 0 0 2px var(--royal);border-color:var(--royal)}
+
   @media (prefers-reduced-motion: reduce){
     *{animation:none !important;transition:none !important}
   }
@@ -327,6 +351,19 @@
     <div class="bars" id="barsBox"></div>
     <button type="button" class="addbar" id="addBarBtn">＋ 加一小节</button>
     <div class="legend">实心 = <b>x</b> 拨弦 ・ 虚框 = <b>—</b> 音延续 ・ 暗格 = 空</div>
+    <div class="transport">
+      <div class="tp-row">
+        <button type="button" class="tp-play" id="playBtn">
+          <span class="ic" id="playIcon">▶</span><span id="playLabel">播放</span>
+        </button>
+        <button type="button" class="tp-toggle" id="metBtn">节拍器</button>
+        <span class="tp-bpm" id="tpBpm">♩ — —</span>
+      </div>
+      <div class="tp-row tp-speedrow">
+        <span class="tp-cap">慢练</span>
+        <div class="chips speedchips" id="speedChips"></div>
+      </div>
+    </div>
   </section>
 
   <!-- 走向 -->
@@ -569,6 +606,7 @@ function drawBpm(){
     b.onclick = ()=>{ S.bpm = S.bpm===v?null:v; drawBpm(); markDirty(); };
     box.appendChild(b);
   });
+  if(typeof updateTpBpm==="function") updateTpBpm();
 }
 
 /* ---------------- 拍号 / 节奏格 ---------------- */
@@ -589,6 +627,7 @@ function newBar(){ const t=tsObj(); return Array(t.beats*t.per).fill(0); }
 function addBar(){ if(S.bars.length<8){ S.bars.push(newBar()); drawBars(); markDirty(); } }
 function delBar(i){ if(S.bars.length>1){ S.bars.splice(i,1); drawBars(); markDirty(); } }
 function drawBars(){
+  if(typeof stopPlay==="function") stopPlay();
   const t = tsObj(), box = document.getElementById("barsBox");
   box.innerHTML = "";
   S.bars.forEach((bar,bi)=>{
@@ -906,6 +945,7 @@ async function importAll(file){
 
 /* ---------------- 视图切换 ---------------- */
 function switchView(v){
+  stopPlay();
   const rec = v==="rec";
   document.getElementById("viewRec").classList.toggle("on", rec);
   document.getElementById("viewLib").classList.toggle("on", !rec);
@@ -942,6 +982,7 @@ function drawAll(){
   document.getElementById("vRe").classList.toggle("on", S.verdict==="re");
   renderChips("landNoteChips",NOTES,()=>S.landNote,v=>S.landNote=v);
   renderChips("degreeChips",DEGREES,()=>S.degree,v=>S.degree=v);
+  drawTransport();
 }
 
 /* ---------------- 事件绑定 ---------------- */
@@ -955,7 +996,10 @@ bind("dirBackBtn",dirBack); bind("dirClearBtn",dirClear);
 bind("skelBackBtn",skelBack); bind("skelClearBtn",skelClear);
 bind("vOk",()=>setVerdict("ok")); bind("vRe",()=>setVerdict("re"));
 bind("btnTxt",exportTxt); bind("btnNext",saveAndNext);
+bind("playBtn",togglePlay); bind("metBtn",toggleMet);
 bind("tabRec",()=>switchView("rec")); bind("tabLib",()=>switchView("lib"));
+window.addEventListener("pagehide", stopPlay);
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden) stopPlay(); });
 bind("themeBtn",toggleTheme);
 bind("btnExportAll",exportAll);
 bind("btnImport",()=>document.getElementById("importFile").click());
@@ -964,6 +1008,176 @@ document.getElementById("importFile").addEventListener("change", e=>{
   if(f) importAll(f);
   e.target.value = "";
 });
+
+/* ================================================================
+   阶段2:节奏播放引擎(Web Audio)
+   - AudioContext 仅在用户点击时创建/解锁(iOS 约束)
+   - lookahead 调度:setInterval 25ms 预排 120ms,音频与画面分离
+   - 拨弦格(值1)合成 pluck 音;节拍器点每拍,小节首拍重音
+   - 慢练 60%-100% 变速,chip 选中态用 Royal;不改动乐句数据
+   ================================================================ */
+const SPEEDS = [60,70,80,90,100];
+let audioCtx = null;
+let _noiseBuf = null;
+const player = {
+  playing:false, metOn:false, speed:100,
+  step:0, nextTime:0, timer:null, rafId:null,
+  queue:[], cells:[], per:1, cellsPerBar:0, totalSteps:0
+};
+
+function ensureCtx(){
+  if(!audioCtx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return null;
+    audioCtx = new AC();
+  }
+  if(audioCtx.state === "suspended"){ audioCtx.resume(); }
+  return audioCtx;
+}
+function baseBpm(){ return S.bpm!==null ? S.bpm : 80; }
+function effBpm(){ return Math.max(20, Math.round(baseBpm() * player.speed / 100)); }
+function secPerCell(){ return (60 / effBpm()) / tsObj().per; }
+
+/* -------- 合成音色 -------- */
+function pickNoise(){
+  if(_noiseBuf) return _noiseBuf;
+  const len = Math.floor(audioCtx.sampleRate * 0.05);
+  const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for(let i=0;i<len;i++){ d[i] = (Math.random()*2-1) * (1 - i/len); }
+  _noiseBuf = buf; return buf;
+}
+function pluck(time){
+  const ctx = audioCtx, master = ctx.createGain();
+  master.gain.setValueAtTime(0.0001, time);
+  master.gain.exponentialRampToValueAtTime(0.5, time+0.006);
+  master.gain.exponentialRampToValueAtTime(0.0001, time+0.24);
+  master.connect(ctx.destination);
+  const lp = ctx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.setValueAtTime(2600, time);
+  lp.frequency.exponentialRampToValueAtTime(520, time+0.2);
+  lp.connect(master);
+  const o1 = ctx.createOscillator(); o1.type="sawtooth"; o1.frequency.value=196;
+  const o2 = ctx.createOscillator(); o2.type="sawtooth"; o2.frequency.value=294;
+  o1.connect(lp); o2.connect(lp);
+  const nb = ctx.createBufferSource(); nb.buffer = pickNoise();
+  const hp = ctx.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=1300;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.28, time);
+  ng.gain.exponentialRampToValueAtTime(0.0001, time+0.03);
+  nb.connect(hp); hp.connect(ng); ng.connect(master);
+  o1.start(time); o2.start(time); nb.start(time);
+  o1.stop(time+0.26); o2.stop(time+0.26); nb.stop(time+0.06);
+}
+function click(time, accent){
+  const ctx = audioCtx;
+  const o = ctx.createOscillator(); o.type="triangle";
+  o.frequency.value = accent ? 1650 : 1050;
+  const g = ctx.createGain();
+  const peak = accent ? 0.5 : 0.3;
+  g.gain.setValueAtTime(0.0001, time);
+  g.gain.exponentialRampToValueAtTime(peak, time+0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, time+0.045);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(time); o.stop(time+0.06);
+}
+
+/* -------- 调度 -------- */
+function scheduleStep(step, time){
+  const cpb = player.cellsPerBar, per = player.per;
+  const cellIdx = step % cpb;
+  const bar = S.bars[Math.floor(step / cpb)];
+  const v = bar ? bar[cellIdx] : 0;
+  if(v === 1) pluck(time);
+  if(player.metOn && (cellIdx % per === 0)) click(time, cellIdx === 0);
+  player.queue.push({ step, time });
+}
+function scheduler(){
+  if(!audioCtx) return;
+  const ahead = 0.12;
+  while(player.nextTime < audioCtx.currentTime + ahead){
+    scheduleStep(player.step, player.nextTime);
+    player.nextTime += secPerCell();
+    player.step = (player.step + 1) % player.totalSteps;
+  }
+}
+function drawLoop(){
+  if(!player.playing || !audioCtx) return;
+  const now = audioCtx.currentTime;
+  let idx = -1;
+  while(player.queue.length && player.queue[0].time <= now){ idx = player.queue.shift().step; }
+  if(idx >= 0){
+    player.cells.forEach(c=>c.classList.remove("playing"));
+    const c = player.cells[idx]; if(c) c.classList.add("playing");
+  }
+  player.rafId = requestAnimationFrame(drawLoop);
+}
+
+/* -------- 播放控制 -------- */
+function startPlay(){
+  if(!ensureCtx()){ toast("此浏览器不支持音频播放"); return; }
+  const t = tsObj();
+  player.per = t.per;
+  player.cellsPerBar = t.beats * t.per;
+  player.totalSteps = Math.max(1, S.bars.length * player.cellsPerBar);
+  player.cells = Array.from(document.querySelectorAll("#barsBox .cell"));
+  player.step = 0;
+  player.queue = [];
+  player.nextTime = audioCtx.currentTime + 0.08;
+  player.playing = true;
+  setPlayUI(true);
+  scheduler();
+  player.timer = setInterval(scheduler, 25);
+  player.rafId = requestAnimationFrame(drawLoop);
+}
+function stopPlay(){
+  if(!player.playing){
+    document.querySelectorAll("#barsBox .cell.playing").forEach(c=>c.classList.remove("playing"));
+    return;
+  }
+  player.playing = false;
+  if(player.timer){ clearInterval(player.timer); player.timer=null; }
+  if(player.rafId){ cancelAnimationFrame(player.rafId); player.rafId=null; }
+  player.queue = [];
+  (player.cells||[]).forEach(c=>c.classList.remove("playing"));
+  document.querySelectorAll("#barsBox .cell.playing").forEach(c=>c.classList.remove("playing"));
+  setPlayUI(false);
+}
+function togglePlay(){ player.playing ? stopPlay() : startPlay(); }
+function toggleMet(){
+  player.metOn = !player.metOn;
+  document.getElementById("metBtn").classList.toggle("on", player.metOn);
+  ensureCtx();
+}
+function setPlayUI(on){
+  document.getElementById("playIcon").textContent = on ? "■" : "▶";
+  document.getElementById("playLabel").textContent = on ? "停止" : "播放";
+  document.getElementById("playBtn").classList.toggle("on", on);
+}
+function updateTpBpm(){
+  const el = document.getElementById("tpBpm"); if(!el) return;
+  const b = effBpm();
+  el.textContent = S.bpm===null ? `♩ ${b} · 未设速度` : `♩ ${b}`;
+}
+function drawTransport(){
+  const box = document.getElementById("speedChips");
+  if(box){
+    box.innerHTML = "";
+    SPEEDS.forEach(p=>{
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip" + (player.speed===p ? " on" : "");
+      b.textContent = p + "%";
+      b.onclick = ()=>{ player.speed = p; drawTransport(); updateTpBpm(); };
+      box.appendChild(b);
+    });
+  }
+  const met = document.getElementById("metBtn");
+  if(met) met.classList.toggle("on", player.metOn);
+  setPlayUI(player.playing);
+  updateTpBpm();
+}
 
 /* ---------------- 启动 ---------------- */
 initTheme();
