@@ -183,6 +183,35 @@
   /* ---------- 乐句库 ---------- */
   .libtools{display:flex;gap:8px;margin-bottom:14px}
   .libtools .chip{flex:1;justify-content:center}
+
+  /* ---------- 复习队列(阶段4) ---------- */
+  .tab{position:relative}
+  .tab .dueflag{position:absolute;top:5px;right:8px;min-width:18px;height:18px;padding:0 5px;
+    border-radius:9px;background:var(--amber);color:var(--on-anchor);font-size:11px;font-weight:700;
+    display:none;align-items:center;justify-content:center;line-height:18px;font-variant-numeric:tabular-nums}
+  .tab .dueflag.show{display:inline-flex}
+  .review{background:var(--surface);border:1px solid var(--line-soft);border-radius:14px;
+    padding:14px 14px 12px;margin-bottom:16px}
+  .review-hd{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+  .review-hd .t{font-size:15px;font-weight:800;color:var(--ink)}
+  .review-hd .n{font-size:13px;font-weight:700;color:var(--amber);font-variant-numeric:tabular-nums}
+  .review-sub{font-size:12.5px;color:var(--muted);margin:0 0 10px}
+  .review-list{display:flex;flex-direction:column;gap:8px}
+  .due-row{display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--well);
+    border:1px solid var(--line);border-radius:10px}
+  .due-row .dno{font-size:13px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;flex:none}
+  .due-row .dsrc{flex:1;font-size:13px;color:var(--body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .due-row .dover{flex:none;font-size:11px;color:var(--warn);font-weight:700}
+  .due-row button{flex:none;min-height:34px;padding:0 12px;border-radius:8px;font-size:12.5px;
+    font-weight:700;font-family:inherit;cursor:pointer;border:1px solid var(--amber);
+    background:var(--amber);color:var(--on-anchor)}
+  .due-row button.ghost{background:transparent;color:var(--body);border-color:var(--line)}
+  .due-row button:active{transform:scale(.95)}
+  .review-all{margin-top:10px;width:100%;min-height:38px;border-radius:9px;font-size:13px;
+    font-weight:700;font-family:inherit;cursor:pointer;border:1px solid var(--line);
+    background:transparent;color:var(--body)}
+  .review.clear{text-align:center}
+  .review.clear .t{display:block;margin-bottom:3px}
   .libcount{font-size:12px;color:var(--muted);margin:0 2px 10px}
   .card{background:var(--surface);border:1px solid var(--line-soft);border-radius:14px;
     padding:14px;margin-bottom:12px}
@@ -307,7 +336,7 @@
     <p class="byline">Room for the asterisks · Asterx</p>
     <div class="tabs">
       <button class="tab on" id="tabRec" type="button">记录</button>
-      <button class="tab" id="tabLib" type="button">乐句库</button>
+      <button class="tab" id="tabLib" type="button">乐句库<span class="dueflag" id="dueFlag"></span></button>
     </div>
     <div class="savestate" id="saveState"></div>
   </header>
@@ -476,6 +505,7 @@
 
   <!-- ================= 乐句库视图 ================= -->
   <div class="view" id="viewLib">
+    <div id="reviewPanel"></div>
     <div class="libtools">
       <button type="button" class="chip" id="btnExportAll">导出备份</button>
       <button type="button" class="chip" id="btnImport">导入备份</button>
@@ -523,6 +553,7 @@ const TS = [
 let S = blankState(1);
 let currentId = newId();
 let currentCreatedAt = Date.now();
+let currentLastReview = null;   /* 本条上次复习时间(阶段4) */
 let everSaved = false;      /* 当前这条是否已写入过数据库 */
 
 function blankState(num){
@@ -595,11 +626,13 @@ async function persist(){
   const rec = Object.assign({}, S, {
     id: currentId,
     createdAt: currentCreatedAt,
+    lastReview: currentLastReview,
     updatedAt: Date.now()
   });
   try{
     await dbPut(rec);
     everSaved = true;
+    refreshReview();
     const t = new Date();
     const p = n=>String(n).padStart(2,"0");
     setSaveState(`已自动入库 · ${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())}`);
@@ -853,6 +886,7 @@ async function startFresh(){
   S.bars = [newBar()];
   currentId = newId();
   currentCreatedAt = Date.now();
+  currentLastReview = null;
   everSaved = false;
   document.getElementById("numVal").textContent = S.num;
   document.getElementById("srcVal").value = "";
@@ -894,6 +928,7 @@ function loadRecord(rec){
 
   currentId = rec.id;
   currentCreatedAt = rec.createdAt || Date.now();
+  currentLastReview = rec.lastReview || null;
   everSaved = true;
   document.getElementById("numVal").textContent = S.num;
   document.getElementById("srcVal").value = S.src;
@@ -909,9 +944,122 @@ function fmtDate(ms){
   const d = new Date(ms), p=n=>String(n).padStart(2,"0");
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+/* ================================================================
+   阶段4·复习队列:所有入库乐句每 7 天复习一次
+   - 到期时间 = (上次复习 || 入库时间) + 7 天;当天或过期即"待复习"
+   - 乐句库顶部列出今日待复习,页签显示待复习数角标
+   - 点「复习了」把上次复习时间设为现在,顺延 7 天
+   ================================================================ */
+const REVIEW_MS = 7 * 24 * 60 * 60 * 1000;
+function endOfToday(){
+  const d = new Date(); d.setHours(23,59,59,999); return d.getTime();
+}
+function dueAt(rec){
+  const base = rec.lastReview || rec.createdAt || rec.updatedAt || Date.now();
+  return base + REVIEW_MS;
+}
+function isDue(rec){ return dueAt(rec) <= endOfToday(); }
+function fmtDay(ms){
+  const d = new Date(ms), p=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+async function reviewMark(rec){
+  rec.lastReview = Date.now();
+  if(rec.id === currentId) currentLastReview = rec.lastReview;
+  await dbPut(rec);
+  toast(`No.${rec.num||"?"} 已复习 · 下次 ${fmtDay(dueAt(rec))}`);
+  renderLib();
+}
+async function reviewMarkAll(due){
+  const now = Date.now();
+  for(const rec of due){
+    rec.lastReview = now;
+    if(rec.id === currentId) currentLastReview = now;
+    await dbPut(rec);
+  }
+  toast(`已标记 ${due.length} 句复习完毕`);
+  renderLib();
+}
+async function updateReviewBadge(){
+  try{
+    const all = await dbAll();
+    const n = all.filter(isDue).length;
+    const flag = document.getElementById("dueFlag");
+    if(flag){ flag.textContent = n; flag.classList.toggle("show", n>0); }
+  }catch(e){}
+}
+function refreshReview(){
+  updateReviewBadge();
+  if(document.getElementById("viewLib").classList.contains("on")) renderReview();
+}
+async function renderReview(){
+  const box = document.getElementById("reviewPanel");
+  if(!box) return;
+  let all;
+  try{ all = await dbAll(); }catch(e){ box.innerHTML=""; return; }
+  if(!all.length){ box.innerHTML = ""; return; }
+  const due = all.filter(isDue).sort((a,b)=>dueAt(a)-dueAt(b));
+  box.innerHTML = "";
+  const panel = document.createElement("div");
+  panel.className = "review" + (due.length ? "" : " clear");
+  if(!due.length){
+    const next = all.map(dueAt).sort((a,b)=>a-b)[0];
+    panel.innerHTML = `<span class="t">今天没有待复习的乐句 ✓</span>`
+      + `<div class="review-sub" style="margin:0">下一次待复习 · ${fmtDay(next)}</div>`;
+    box.appendChild(panel);
+    return;
+  }
+  const hd = document.createElement("div"); hd.className="review-hd";
+  hd.innerHTML = `<span class="t">今日待复习</span><span class="n">${due.length} 句</span>`;
+  panel.appendChild(hd);
+  const sub = document.createElement("p"); sub.className="review-sub";
+  sub.textContent = "拿起琴,凭骨架现编几句验证还记得。复习完点「复习了」顺延一周。";
+  panel.appendChild(sub);
+
+  const listEl = document.createElement("div"); listEl.className="review-list";
+  const today = endOfToday();
+  due.slice(0, 12).forEach(rec=>{
+    const row = document.createElement("div"); row.className="due-row";
+    const no = document.createElement("span"); no.className="dno"; no.textContent = `No.${rec.num||"?"}`;
+    const src = document.createElement("span"); src.className="dsrc";
+    src.textContent = rec.src || "(未填来源)";
+    row.appendChild(no); row.appendChild(src);
+    const overdueDays = Math.floor((today - dueAt(rec)) / (24*60*60*1000));
+    if(overdueDays >= 1){
+      const ov = document.createElement("span"); ov.className="dover";
+      ov.textContent = `逾期${overdueDays}天`; row.appendChild(ov);
+    }
+    const bOpen = document.createElement("button"); bOpen.type="button"; bOpen.className="ghost";
+    bOpen.textContent = "打开"; bOpen.onclick = ()=>loadRecord(rec);
+    const bDone = document.createElement("button"); bDone.type="button";
+    bDone.textContent = "复习了"; bDone.onclick = ()=>reviewMark(rec);
+    row.appendChild(bOpen); row.appendChild(bDone);
+    listEl.appendChild(row);
+  });
+  panel.appendChild(listEl);
+
+  if(due.length > 1){
+    const bAll = document.createElement("button"); bAll.className="review-all"; bAll.type="button";
+    bAll.textContent = `全部标记复习完毕(${due.length})`;
+    bAll.onclick = ()=>reviewMarkAll(due);
+    panel.appendChild(bAll);
+  }
+  if(due.length > 12){
+    const more = document.createElement("p"); more.className="review-sub";
+    more.style.margin = "10px 0 0";
+    more.textContent = `还有 ${due.length - 12} 句待复习,先从上面开始。`;
+    panel.appendChild(more);
+  }
+  box.appendChild(panel);
+}
+
 async function renderLib(){
+  renderReview();
   const list = document.getElementById("libList");
   const all = (await dbAll()).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const dueN = all.filter(isDue).length;
+  const flag = document.getElementById("dueFlag");
+  if(flag){ flag.textContent = dueN; flag.classList.toggle("show", dueN>0); }
   document.getElementById("libCount").textContent =
     all.length ? `共 ${all.length} 条 · 数据存在本机,定期「导出备份」更安心` : "";
   list.innerHTML = "";
@@ -1608,6 +1756,7 @@ initTheme();
     const n = await maxNum();
     if(n >= S.num){ S.num = n+1; document.getElementById("numVal").textContent = S.num; }
     setSaveState(n>0 ? `库里已有记录,新乐句从 No.${S.num} 开始` : "新乐句 · 尚未填写");
+    updateReviewBadge();
   }catch(e){
     setSaveState("本机存储不可用,请依赖「导出文本/备份」");
   }
