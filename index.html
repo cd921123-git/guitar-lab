@@ -252,6 +252,34 @@
   .atwrap .at-cursor-bar{background:rgba(28,48,96,.10)}
   .atwrap .at-cursor-beat{background:var(--royal);opacity:.8}
   .atwrap .at-highlight *{fill:var(--amber);stroke:var(--amber)}
+
+  /* ---------- 指板选择器(阶段3B) ---------- */
+  .fret-wrap{background:var(--well);border:1px solid var(--line);border-radius:12px;
+    padding:8px 6px 6px;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px}
+  .fret-grid{display:grid;gap:4px;width:max-content}
+  .fret-hd{font-size:10px;color:var(--muted);text-align:center;height:14px;line-height:14px;
+    font-variant-numeric:tabular-nums}
+  .fret-slab{font-size:10px;color:var(--muted);display:flex;align-items:center;
+    justify-content:flex-end;padding-right:6px;white-space:nowrap}
+  .fret-cell{width:34px;height:30px;border-radius:7px;border:1px solid var(--line);
+    background:var(--surface);display:flex;align-items:center;justify-content:center;
+    font-size:12px;color:var(--body);cursor:pointer;user-select:none;position:relative;
+    font-variant-numeric:tabular-nums}
+  .fret-cell.open{background:var(--well)}
+  .fret-cell:active{transform:scale(.9)}
+  .fret-cell.picked{background:var(--amber);border-color:var(--amber);color:var(--on-anchor);font-weight:700}
+  .fret-cell .dot{width:5px;height:5px;border-radius:50%;background:var(--muted);opacity:.5}
+  .dur-row{display:flex;align-items:center;gap:8px;margin:10px 0 2px;flex-wrap:wrap}
+  .dur-row .tp-cap{font-size:12px;color:var(--muted)}
+  .note-seq{min-height:44px;background:var(--well);border:1px solid var(--line);border-radius:10px;
+    padding:8px 10px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+  .note-seq:empty::before{content:attr(data-empty);color:var(--muted);font-size:13px}
+  .note-pill{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:8px;
+    background:var(--surface);border:1px solid var(--line);font-size:13px;color:var(--ink);
+    cursor:pointer;font-variant-numeric:tabular-nums;font-weight:600}
+  .note-pill .d{font-size:11px;color:var(--amber);font-weight:700}
+  .note-pill.rest{color:var(--muted);font-style:italic}
+  .note-pill:active{transform:scale(.95)}
 </style>
 </head>
 <body>
@@ -379,15 +407,32 @@
     </div>
   </section>
 
-  <!-- 谱面(阶段3A) -->
+  <!-- 谱面(阶段3B:点选录入 + 播放) -->
   <section>
-    <div class="sec-title"><span class="sec-num">谱面</span><span class="sec-name">六线谱试奏(阶段 3A 试验)</span></div>
-    <p class="hint">验证谱面引擎:改下面的谱(音符 = 品.弦,弦号 1 = 最细的高音 E 弦),渲染后用吉他音色播放。阶段 3B 会换成点选输入。</p>
-    <textarea id="atTex" class="attex" rows="3" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+    <div class="sec-title"><span class="sec-num">谱面</span><span class="sec-name">点指板拼谱 · 试奏</span></div>
+    <p class="hint">在指板上点音(行 = 弦,1 弦最细;列 = 品位)。先选下面的时值,再点音;点序列里的音可循环改时值。</p>
+    <div class="fret-wrap"><div class="fret-grid" id="fretGrid"></div></div>
+    <div class="dur-row">
+      <span class="tp-cap">时值</span>
+      <div class="chips" id="durChips"></div>
+      <button type="button" class="chip util" id="restBtn">＋ 休止</button>
+    </div>
+    <div class="note-seq" id="noteSeq" data-empty="还没点音 · 点指板开始"></div>
     <div class="seqbtns">
       <button type="button" class="chip" id="atRenderBtn" style="border-color:var(--amber)">渲染谱面</button>
-      <button type="button" class="chip" id="atPlayBtn">▶ 播放</button>
-      <button type="button" class="chip util" id="atDemoBtn">恢复示例</button>
+      <button type="button" class="chip" id="skelImportBtn">导入骨架试听</button>
+      <button type="button" class="chip util" id="noteBackBtn">⌫ 退一个</button>
+      <button type="button" class="chip util" id="noteClearBtn">清空</button>
+    </div>
+    <div class="transport" style="margin-top:12px">
+      <div class="tp-row">
+        <button type="button" class="tp-play" id="atPlayBtn"><span class="ic">▶</span><span>播放</span></button>
+        <button type="button" class="tp-toggle" id="atLoopBtn">A-B 循环</button>
+      </div>
+      <div class="tp-row tp-speedrow">
+        <span class="tp-cap">慢练</span>
+        <div class="chips speedchips" id="atSpeedChips"></div>
+      </div>
     </div>
     <div class="atstatus" id="atStatus">引擎未加载 · 点「渲染谱面」开始(首次加载约 1 MB)</div>
     <div class="atwrap" id="atWrap" hidden><div id="atMain"></div></div>
@@ -1210,16 +1255,114 @@ function drawTransport(){
 }
 
 /* ================================================================
-   阶段3A:六线谱试奏(自托管 alphaTab 最小集成)
-   - 首次点「渲染谱面」才加载 alphatab/alphaTab.min.js(懒加载,不拖慢启动)
-   - 渲染只出六线谱(staveProfile: tab),水平排版,配色跟随主题
-   - 播放优先 sonivox.sf3 吉他音色;soundfont 未就绪/失败 → 降级为
-     合成拨弦音(读 api.score 的 realValue / absolutePlaybackStart 调度)
-   - 与阶段2节奏循环互斥:任一开始播放,另一个自动停止
+   阶段3B:点指板拼谱 → 生成 alphaTex → 渲染 / 试奏
+   - 指板选择器:6 弦 × 0-12 品,点格入音;时值 chip(2/4/8/16),默认 8;
+     序列里的音可点击循环改时值。休止符独立按钮。
+   - 导入骨架:把「骨架」区的音名(八度 4)追加到序列,一键试听。
+   - 慢练 60-100%(真播放器用 playbackSpeed;降级合成按 tempo 折算)。
+   - A-B 循环:真播放器用 isLooping;降级合成到尾自动重排。
+   - 底层仍是自托管 alphaTab:懒加载、tab 谱、配色跟随主题;
+     soundFont 未就绪/失败 → 降级合成拨弦音(按 realValue 调度)。
+   - 与阶段2节奏循环互斥。
    ================================================================ */
-const AT_DEMO = "\\tempo 80 .\n:8 5.4 7.4 5.3 7.3 5.2 8.2 5.1 8.1 |\n:2 5.1{v} r";
-const at3 = { api:null, rendered:false, sfOk:false, playing:false, fb:null, fbTimer:null };
+const AT_TUNING = [64,59,55,50,45,40];         /* 弦1..6 空弦 midi(高E→低E) */
+const PC_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const DURS = [2,4,8,16];
+const DUR_LABEL = { 2:"♪1/2", 4:"♩", 8:"♪", 16:"♬" };
+/* 序列项:{s,f,dur} 品位音 | {name,dur} 骨架音名 | {rest:true,dur} 休止 */
+let atNotes = [
+  {s:4,f:5,dur:8},{s:4,f:7,dur:8},{s:3,f:5,dur:8},{s:3,f:7,dur:8},
+  {s:2,f:5,dur:8},{s:2,f:8,dur:8},{s:1,f:5,dur:8},{s:1,f:8,dur:8}
+];
+let atCurDur = 8;
+const at3 = { api:null, rendered:false, sfOk:false, playing:false, fb:null, fbTimer:null,
+              speed:100, loop:false };
 
+/* -------- 指板选择器 -------- */
+function noteName(s,f){ return PC_NAMES[(AT_TUNING[s-1]+f)%12]; }
+function buildFretGrid(){
+  const grid = document.getElementById("fretGrid");
+  if(!grid) return;
+  const FRETS = 12;
+  grid.style.gridTemplateColumns = "36px repeat(" + (FRETS+1) + ", 34px)";
+  grid.innerHTML = "";
+  const corner = document.createElement("div"); corner.className="fret-hd"; grid.appendChild(corner);
+  for(let f=0; f<=FRETS; f++){
+    const h = document.createElement("div"); h.className="fret-hd"; h.textContent=f; grid.appendChild(h);
+  }
+  for(let s=1; s<=6; s++){
+    const lab = document.createElement("div"); lab.className="fret-slab";
+    lab.textContent = s + "弦 " + PC_NAMES[AT_TUNING[s-1]%12];
+    grid.appendChild(lab);
+    for(let f=0; f<=FRETS; f++){
+      const c = document.createElement("div");
+      c.className = "fret-cell" + (f===0 ? " open" : "");
+      c.textContent = noteName(s,f);
+      c.onclick = ()=>{ atNotes.push({s, f, dur:atCurDur}); drawNoteSeq(); flashCell(c); };
+      grid.appendChild(c);
+    }
+  }
+}
+function flashCell(c){ c.classList.add("picked"); setTimeout(()=>c.classList.remove("picked"), 180); }
+function drawDurChips(){
+  const box = document.getElementById("durChips"); if(!box) return;
+  box.innerHTML = "";
+  DURS.forEach(d=>{
+    const b = document.createElement("button"); b.type="button";
+    b.className = "chip" + (atCurDur===d ? " on" : "");
+    b.textContent = DUR_LABEL[d];
+    b.onclick = ()=>{ atCurDur = d; drawDurChips(); };
+    box.appendChild(b);
+  });
+}
+function noteLabel(it){
+  if(it.rest) return "休止";
+  if(it.as) return it.as + "·" + it.s + "弦" + it.f + "品";
+  return it.s + "弦" + it.f + "品";
+}
+function drawNoteSeq(){
+  const box = document.getElementById("noteSeq"); if(!box) return;
+  box.innerHTML = "";
+  atNotes.forEach((it, i)=>{
+    const p = document.createElement("span");
+    p.className = "note-pill" + (it.rest ? " rest" : "");
+    p.innerHTML = "<span>" + noteLabel(it) + "</span><span class='d'>" + DUR_LABEL[it.dur] + "</span>";
+    p.title = "点击循环改时值";
+    p.onclick = ()=>{ const idx = DURS.indexOf(it.dur); it.dur = DURS[(idx+1)%DURS.length]; drawNoteSeq(); };
+    box.appendChild(p);
+  });
+}
+
+/* -------- alphaTex 生成 -------- */
+function buildTex(){
+  const tempo = (typeof S!=="undefined" && S.bpm!==null) ? S.bpm : 80;
+  if(!atNotes.length) return "\\tempo " + tempo + " . r";
+  const BAR = 3840;               /* 4/4 一小节的 tick 数 */
+  let out = [], last = null, acc = 0;
+  atNotes.forEach(it=>{
+    const tk = BAR / it.dur;
+    if(acc > 0 && acc + tk > BAR + 1){ out.push("|"); acc = 0; last = null; }
+    let seg = "";
+    if(it.dur !== last){ seg += ":" + it.dur + " "; last = it.dur; }
+    if(it.rest) seg += "r";
+    else seg += it.f + "." + it.s;
+    out.push(seg); acc += tk;
+  });
+  return "\\tempo " + tempo + " .\n" + out.join(" ");
+}
+/* midi → 指板位置(优先低把位),用于骨架音名落到 tab 谱 */
+function midiToPos(midi){
+  let best = null;
+  for(let s=1; s<=6; s++){
+    const f = midi - AT_TUNING[s-1];
+    if(f>=0 && f<=15){
+      if(!best || f < best.f) best = { s, f };
+    }
+  }
+  return best || { s:1, f:0 };
+}
+
+/* -------- alphaTab 引擎 -------- */
 function at3Status(msg, cls){
   const el = document.getElementById("atStatus");
   if(el){ el.textContent = msg; el.className = "atstatus" + (cls ? " " + cls : ""); }
@@ -1260,6 +1403,7 @@ function at3Init(){
   at3.sfOk = false; at3.rendered = false; at3.playing = false;
   at3.api.playerReady.on(()=>{
     at3.sfOk = true;
+    at3ApplyPlayback();
     if(!at3.playing && !at3.fb) at3Status("引擎就绪 · 吉他音色已加载", "ok");
   });
   at3.api.error.on(e=>{
@@ -1269,12 +1413,18 @@ function at3Init(){
   at3.api.renderFinished.on(()=>{
     at3.rendered = true;
     document.getElementById("atWrap").hidden = false;
+    at3ApplyPlayback();
     if(!at3.sfOk) at3Status("谱面已渲染 · 音色库加载中…(未就绪时播放会先用合成音色)");
   });
   at3.api.playerStateChanged.on(e=>{
     at3.playing = (e && e.state === 1);
     at3PlayUI();
   });
+}
+function at3ApplyPlayback(){
+  if(!at3.api) return;
+  try{ at3.api.playbackSpeed = at3.speed / 100; }catch(e){}
+  try{ at3.api.isLooping = at3.loop; }catch(e){}
 }
 async function at3Render(){
   try{
@@ -1283,11 +1433,9 @@ async function at3Render(){
       await at3LoadScript();
     }
     if(!at3.api) at3Init();
-    const ta = document.getElementById("atTex");
-    const tex = (ta.value || "").trim() || AT_DEMO;
     at3Status("渲染中…");
     document.getElementById("atWrap").hidden = false;
-    at3.api.tex(tex);
+    at3.api.tex(buildTex());
   }catch(err){
     at3Status("引擎加载失败 · 请确认仓库根目录有 alphatab/ 文件夹", "err");
   }
@@ -1298,6 +1446,7 @@ function at3Play(){
   if(!at3.api || !at3.rendered){ toast("先点「渲染谱面」"); at3Render(); return; }
   stopPlay();                      /* 停掉节奏循环,互斥 */
   if(at3.sfOk){
+    at3ApplyPlayback();
     try{ at3.api.play(); }
     catch(e){ at3Fb(); }
   }else{
@@ -1313,18 +1462,39 @@ function at3PlayUI(){
   const b = document.getElementById("atPlayBtn");
   if(!b) return;
   const on = at3.playing || !!at3.fb;
-  b.textContent = on ? "■ 停止" : "▶ 播放";
+  b.querySelector(".ic").textContent = on ? "■" : "▶";
+  b.querySelector("span:last-child").textContent = on ? "停止" : "播放";
   b.classList.toggle("on", on);
 }
 function at3Retheme(){
   if(!at3.api) return;
   at3Stop();
-  const ta = document.getElementById("atTex");
-  const tex = (ta && ta.value.trim()) || AT_DEMO;
   const wasRendered = at3.rendered;
   try{ at3.api.destroy(); }catch(e){}
   at3.api = null; at3.rendered = false; at3.sfOk = false;
-  if(wasRendered){ at3Init(); try{ at3.api.tex(tex); }catch(e){} }
+  if(wasRendered){ at3Init(); try{ at3.api.tex(buildTex()); }catch(e){} }
+}
+function at3SetSpeed(p){
+  at3.speed = p; drawAtSpeed();
+  if(at3.api) at3ApplyPlayback();
+  if(at3.fb){ at3FbStop(); at3Fb(); }   /* 合成音色变速:重排当前循环 */
+}
+function at3ToggleLoop(){
+  at3.loop = !at3.loop;
+  const b = document.getElementById("atLoopBtn");
+  if(b) b.classList.toggle("on", at3.loop);
+  if(at3.api) at3ApplyPlayback();
+}
+function drawAtSpeed(){
+  const box = document.getElementById("atSpeedChips"); if(!box) return;
+  box.innerHTML = "";
+  [60,70,80,90,100].forEach(p=>{
+    const b = document.createElement("button"); b.type="button";
+    b.className = "chip" + (at3.speed===p ? " on" : "");
+    b.textContent = p + "%";
+    b.onclick = ()=>at3SetSpeed(p);
+    box.appendChild(b);
+  });
 }
 
 /* -------- 降级:合成拨弦音按 score 调度 -------- */
@@ -1362,7 +1532,7 @@ function at3Fb(){
   if(!ensureCtx()){ toast("此浏览器不支持音频播放"); return; }
   const score = at3.api && at3.api.score;
   if(!score || !score.tracks.length){ toast("没有可播放的谱面"); return; }
-  const tempo = score.tempo || 80;
+  const tempo = (score.tempo || 80) * at3.speed / 100;   /* 变速:折算 tempo */
   const spt = 60 / (tempo * 960);   /* 每 tick 秒数,四分音符 = 960 tick */
   const master = audioCtx.createGain();
   master.gain.value = 0.9;
@@ -1393,19 +1563,40 @@ function at3Fb(){
     return;
   }
   at3PlayUI();
-  at3.fbTimer = setTimeout(at3FbStop, Math.ceil((end + 0.5) * 1000));
+  const ms = Math.ceil((end + 0.4) * 1000);
+  at3.fbTimer = setTimeout(()=>{
+    if(at3.loop && at3.fb){ try{ at3.fb.disconnect(); }catch(e){} at3.fb=null; at3Fb(); }
+    else at3FbStop();
+  }, ms);
 }
 
+/* -------- 骨架导入 / 编辑按钮 -------- */
+function at3ImportSkel(){
+  if(typeof S==="undefined" || !S.skel || !S.skel.length){ toast("骨架还没填音"); return; }
+  const pcOf = {C:0,"C#":1,D:2,Eb:3,E:4,F:5,"F#":6,G:7,Ab:8,A:9,Bb:10,B:11};
+  let ok = 0;
+  S.skel.forEach(n=>{
+    const pc = pcOf[n];
+    if(pc===undefined) return;
+    const pos = midiToPos(60 + pc);      /* 骨架统一放八度 4 */
+    atNotes.push({ s:pos.s, f:pos.f, dur:4, as:n });
+    ok++;
+  });
+  drawNoteSeq();
+  toast("已导入 " + ok + " 个骨架音");
+}
+
+buildFretGrid();
+drawDurChips();
+drawNoteSeq();
+drawAtSpeed();
 bind("atRenderBtn", at3Render);
 bind("atPlayBtn", at3Play);
-bind("atDemoBtn", ()=>{
-  document.getElementById("atTex").value = AT_DEMO;
-  toast("已恢复示例");
-});
-(function(){
-  const ta = document.getElementById("atTex");
-  if(ta && !ta.value) ta.value = AT_DEMO;
-})();
+bind("atLoopBtn", at3ToggleLoop);
+bind("skelImportBtn", at3ImportSkel);
+bind("restBtn", ()=>{ atNotes.push({ rest:true, dur:atCurDur }); drawNoteSeq(); });
+bind("noteBackBtn", ()=>{ atNotes.pop(); drawNoteSeq(); });
+bind("noteClearBtn", ()=>{ atNotes = []; drawNoteSeq(); });
 
 /* ---------------- 启动 ---------------- */
 initTheme();
