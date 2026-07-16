@@ -38,6 +38,7 @@
     --on-anchor:#191919;     /* Amber 上的文字 */
     --on-royal:#FAFAF7;
     --cell-empty:#F0EDE3;
+    --sheet:#FAFAF7;         /* 底部浮层：不透明 */
     --savebar:rgba(250,250,247,.88);
   }
   :root[data-theme="dark"]{
@@ -53,6 +54,7 @@
     --on-anchor:#191919;
     --on-royal:#FAFAF7;
     --cell-empty:#3E3E3C;
+    --sheet:#232322;         /* 底部浮层：不透明，浮于舞台之上 */
     --savebar:rgba(37,37,36,.90);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -133,7 +135,7 @@
   .stepper button{width:48px;height:44px;background:var(--well);border:none;color:var(--ink);
     font-size:22px;font-weight:800;cursor:pointer;font-family:inherit}
   .stepper .val{min-width:64px;text-align:center;font-size:18px;font-weight:800;
-    background:var(--surface);color:var(--ink);font-variant-numeric:tabular-nums;cursor:text}
+    background:var(--well);color:var(--ink);font-variant-numeric:tabular-nums;cursor:text}
   .stepper .val input{width:64px;border:none;background:transparent;text-align:center;
     font-size:18px;font-weight:800;color:var(--ink);font-family:inherit;outline:none;
     -webkit-appearance:none;-moz-appearance:textfield;padding:0}
@@ -148,13 +150,14 @@
     display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;
     font-family:inherit;font-variant-numeric:tabular-nums}
   .pickbox::after{content:"▾";font-size:12px;color:var(--muted);font-weight:700}
+  .speedbox{min-width:74px;height:38px;font-size:15px;padding:0 12px}
 
   /* ---------- 底部滚轮浮层 ---------- */
   .sheet-mask{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:200;
     display:flex;align-items:flex-end;justify-content:center;
     opacity:0;pointer-events:none;transition:opacity .2s}
   .sheet-mask.on{opacity:1;pointer-events:auto}
-  .sheet{width:100%;max-width:560px;background:var(--surface);
+  .sheet{width:100%;max-width:560px;background:var(--sheet);
     border-top-left-radius:20px;border-top-right-radius:20px;
     box-shadow:0 -8px 40px rgba(0,0,0,.25);
     padding:12px 18px calc(18px + env(safe-area-inset-bottom));
@@ -185,9 +188,17 @@
   .bar-head{display:flex;justify-content:space-between;align-items:center;margin:0 4px 8px}
   .bar-head .bn{font-size:12px;color:var(--muted);letter-spacing:.08em}
   .bar-head .del{font-size:12px;color:var(--err);background:none;border:none;padding:4px 8px;cursor:pointer;font-family:inherit}
-  .grid{display:flex;width:max-content}
-  .beatgroup{display:flex;gap:4px;padding:0 5px;border-left:1px solid var(--line)}
+  .grid{display:flex;width:max-content;align-items:flex-start}
+  .beatgroup{display:flex;flex-direction:column;gap:6px;padding:0 6px;border-left:1px solid var(--line)}
   .beatgroup:first-child{border-left:none}
+  .beat-top{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 2px;min-height:26px}
+  .beat-top .beatno{font-size:13px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
+  .subpill{font-size:12px;font-weight:700;font-family:inherit;color:var(--royal);
+    background:none;border:1px solid var(--line);border-radius:7px;padding:2px 7px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:3px}
+  :root[data-theme="dark"] .subpill{color:var(--body)}
+  .subpill::after{content:"▾";font-size:9px;color:var(--muted)}
+  .beat-cells{display:flex;gap:4px}
   .cellcol{display:flex;flex-direction:column;align-items:center;gap:4px}
   .cellcol .lab{font-size:11px;color:var(--muted);height:14px;font-variant-numeric:tabular-nums}
   .cell{width:38px;height:46px;border-radius:8px;border:1px solid var(--line);
@@ -196,6 +207,8 @@
     font-family:inherit;transition:background .1s,border-color .1s}
   .cell[data-s="1"]{background:var(--amber);border-color:var(--amber);color:var(--on-anchor)}
   .cell[data-s="2"]{background:transparent;border:1px dashed var(--amber);color:var(--amber)}
+  .cell.playing{outline:2px solid var(--royal);outline-offset:1px}
+  :root[data-theme="dark"] .cell.playing{outline-color:var(--amber)}
   .cell:active{transform:scale(.95)}
   .addbar{width:100%;min-height:46px;border:1px dashed var(--line);border-radius:12px;
     background:none;color:var(--muted);font-size:15px;cursor:pointer;margin-top:10px;font-family:inherit}
@@ -499,7 +512,7 @@
       </div>
       <div class="tp-row tp-speedrow">
         <span class="tp-cap">慢练</span>
-        <div class="chips speedchips" id="speedChips"></div>
+        <button type="button" class="pickbox speedbox" id="speedBox">100%</button>
       </div>
     </div>
   </section>
@@ -528,7 +541,7 @@
       </div>
       <div class="tp-row tp-speedrow">
         <span class="tp-cap">慢练</span>
-        <div class="chips speedchips" id="atSpeedChips"></div>
+        <button type="button" class="pickbox speedbox" id="atSpeedBox">100%</button>
       </div>
     </div>
     <div class="atstatus" id="atStatus">引擎未加载 · 点「渲染谱面」开始(首次加载约 1 MB)</div>
@@ -619,6 +632,68 @@ const TS = [
 const TS_ALIAS = { "24_8":"24", "34_8":"34", "44_8":"44", "44_16":"44", "44_3":"44" };
 function tsNorm(id){ return TS_ALIAS[id] || id; }
 
+/* -------- 节奏数据模型（每拍可变细分） --------
+   bar = [ beat, beat, ... ]      长度 = 拍数
+   beat = { cells:[v,v,...] }      v ∈ {0空 1拨 2延}，cells.length = 该拍细分数
+*/
+const SUB_OPTS = [
+  { value:1, label:"1 · 整拍" },
+  { value:2, label:"2 · 八分" },
+  { value:3, label:"3 · 三连" },
+  { value:4, label:"4 · 十六" },
+  { value:6, label:"6 · 六连" },
+  { value:8, label:"8 · 三十二" }
+];
+const SUB_LABS = {
+  1:[""], 2:["","&"], 3:["","·","·"], 4:["","e","&","a"],
+  6:["","·","·","·","·","·"], 8:["","·","·","·","·","·","·","·"]
+};
+function subLab(sub,i){ const a=SUB_LABS[sub]||[]; return a[i]||"·"; }
+function newBeat(sub){ return { cells: Array(Math.max(1,sub)).fill(0) }; }
+/* 把任意格式的 bar 归一成 [{cells}] —— 兼容旧 flat 数组 */
+function barBeats(bar, t){
+  t = t || tsObj();
+  if(Array.isArray(bar) && bar.length && bar[0] && typeof bar[0]==="object" && Array.isArray(bar[0].cells)){
+    return bar.map(be=>({ cells: be.cells.map(v=>(v===1||v===2)?v:0) }));
+  }
+  /* 旧 flat：按拍号 per 切拍 */
+  const flat = Array.isArray(bar) ? bar : [];
+  const out = [];
+  for(let b=0;b<t.beats;b++){
+    const cells = [];
+    for(let s=0;s<t.per;s++){ const v=Number(flat[b*t.per+s]); cells.push((v===1||v===2)?v:0); }
+    out.push({ cells });
+  }
+  return out;
+}
+/* 旧拍号 id → 原始 beats/per（用于精确还原旧 flat 记录的细分） */
+const LEGACY_TS = {
+  "24_8":{beats:2,per:2}, "34_8":{beats:3,per:2}, "44_8":{beats:4,per:2},
+  "44_16":{beats:4,per:4}, "44_3":{beats:4,per:3},
+  "68":{beats:2,per:3}, "98":{beats:3,per:3}, "128":{beats:4,per:3}
+};
+function legacyDims(tsId){
+  if(LEGACY_TS[tsId]) return LEGACY_TS[tsId];
+  const t = TS.find(x=>x.id===tsNorm(tsId)) || TS[0];
+  return { beats:t.beats, per:t.per };
+}
+/* 原始记录 bars（新/旧格式皆可）→ 统一新格式 [{cells}]，旧 flat 用其原拍号细分还原 */
+function migrateBars(rawBars, rawTsId){
+  const bars = (Array.isArray(rawBars) ? rawBars : []).filter(Array.isArray).slice(0,8);
+  return bars.map(b=>{
+    if(b.length && b[0] && typeof b[0]==="object" && Array.isArray(b[0].cells)){
+      return b.map(be=>({ cells: be.cells.map(v=>(v===1||v===2)?v:0) }));
+    }
+    const dim = legacyDims(rawTsId), out = [];
+    for(let bi=0;bi<dim.beats;bi++){
+      const cells = [];
+      for(let s=0;s<dim.per;s++){ const v=Number(b[bi*dim.per+s]); cells.push((v===1||v===2)?v:0); }
+      out.push({ cells });
+    }
+    return out;
+  });
+}
+
 /* ---------------- 当前乐句状态 ---------------- */
 let S = blankState(1);
 let currentId = newId();
@@ -644,7 +719,7 @@ function isEmptyState(){
   return !S.src && !S.key && S.chords.length===0 && S.bpm===null &&
     !S.landNote && !S.degree && S.dir.length===0 && S.skel.length===0 &&
     !S.ver.some(v=>v) && S.verdict===null &&
-    !S.bars.some(bar=>bar.some(c=>c!==0));
+    !S.bars.some(bar=>(bar||[]).some(be=>be&&be.cells&&be.cells.some(c=>c!==0)));
 }
 
 /* ---------------- IndexedDB ---------------- */
@@ -848,12 +923,20 @@ function closeWheel(){
   document.getElementById("wheelMask").classList.remove("on");
   _wheel = null; _wheelSel = null;
 }
-function newBar(){ const t=tsObj(); return Array(t.beats*t.per).fill(0); }
+function newBar(){ const t=tsObj(); return Array.from({length:t.beats},()=>newBeat(t.per)); }
 function addBar(){ if(S.bars.length<8){ S.bars.push(newBar()); drawBars(); markDirty(); } }
 function delBar(i){ if(S.bars.length>1){ S.bars.splice(i,1); drawBars(); markDirty(); } }
+/* 改某一拍的细分数：保留前 min(旧,新) 格 */
+function setBeatSub(bi, bei, sub){
+  const beat = S.bars[bi] && S.bars[bi][bei]; if(!beat) return;
+  const old = beat.cells, nc = Array(sub).fill(0);
+  for(let i=0;i<sub && i<old.length;i++) nc[i]=old[i];
+  beat.cells = nc;
+  drawBars(); markDirty();
+}
 function drawBars(){
   if(typeof stopPlay==="function") stopPlay();
-  const t = tsObj(), box = document.getElementById("barsBox");
+  const box = document.getElementById("barsBox");
   box.innerHTML = "";
   S.bars.forEach((bar,bi)=>{
     const d=document.createElement("div"); d.className="bar";
@@ -866,26 +949,37 @@ function drawBars(){
     }
     d.appendChild(h);
     const g=document.createElement("div"); g.className="grid";
-    for(let beat=0;beat<t.beats;beat++){
+    bar.forEach((beat,bei)=>{
+      const sub = beat.cells.length;
       const bg=document.createElement("div"); bg.className="beatgroup";
-      for(let s=0;s<t.per;s++){
-        const idx=beat*t.per+s;
+      /* 拍头：拍号 + 细分 pill */
+      const top=document.createElement("div"); top.className="beat-top";
+      const no=document.createElement("span"); no.className="beatno"; no.textContent=String(bei+1);
+      const pill=document.createElement("button"); pill.type="button"; pill.className="subpill";
+      pill.textContent = String(sub);
+      pill.onclick = ()=>openWheel("每拍音符数", SUB_OPTS, sub, v=>setBeatSub(bi,bei,v));
+      top.appendChild(no); top.appendChild(pill);
+      bg.appendChild(top);
+      /* 格子行 */
+      const cells=document.createElement("div"); cells.className="beat-cells";
+      beat.cells.forEach((v,s)=>{
         const col=document.createElement("div"); col.className="cellcol";
         const lab=document.createElement("div"); lab.className="lab";
-        lab.textContent = s===0 ? String(beat+1) : t.labs[s];
+        lab.textContent = s===0 ? "" : subLab(sub,s);
         const c=document.createElement("button"); c.type="button"; c.className="cell";
-        c.dataset.s = bar[idx];
-        c.textContent = bar[idx]===1?"x":bar[idx]===2?"—":"·";
+        c.dataset.s = v;
+        c.textContent = v===1?"x":v===2?"—":"·";
         c.onclick = ()=>{
-          bar[idx] = (bar[idx]+1)%3;
-          c.dataset.s = bar[idx];
-          c.textContent = bar[idx]===1?"x":bar[idx]===2?"—":"·";
+          beat.cells[s] = (beat.cells[s]+1)%3;
+          c.dataset.s = beat.cells[s];
+          c.textContent = beat.cells[s]===1?"x":beat.cells[s]===2?"—":"·";
           markDirty();
         };
-        col.appendChild(lab); col.appendChild(c); bg.appendChild(col);
-      }
+        col.appendChild(lab); col.appendChild(c); cells.appendChild(col);
+      });
+      bg.appendChild(cells);
       g.appendChild(bg);
-    }
+    });
     d.appendChild(g); box.appendChild(d);
   });
 }
@@ -948,15 +1042,15 @@ function snapshotTXT(){
   S.bars.forEach((bar,bi)=>{
     L.push(`第 ${bi+1} 小节`);
     let labRow="拍: ", valRow="记: ";
-    for(let beat=0;beat<t.beats;beat++){
-      for(let s=0;s<t.per;s++){
-        const lab = s===0?String(beat+1):(t.labs[s]||"·");
-        labRow+=pad(lab,3);
-        const v=bar[beat*t.per+s];
-        valRow+=pad(v===1?"x":v===2?"—":"·",3);
-      }
+    barBeats(bar,t).forEach((beat,bei)=>{
+      const sub = beat.cells.length;
+      beat.cells.forEach((v,s)=>{
+        const lab = s===0 ? String(bei+1) : (subLab(sub,s)||"·");
+        labRow += pad(lab,3);
+        valRow += pad(v===1?"x":v===2?"—":"·",3);
+      });
       labRow+=" "; valRow+=" ";
-    }
+    });
     L.push(labRow); L.push(valRow); L.push("");
   });
   L.push("── 走向 ──────────────────────────");
@@ -1036,14 +1130,8 @@ function loadRecord(rec){
     ver: (Array.isArray(rec.ver)&&rec.ver.length===5)?rec.ver.map(Boolean):[false,false,false,false,false],
     verdict: (rec.verdict==="ok"||rec.verdict==="re")?rec.verdict:null
   });
-  /* 修复 bars:必须是与拍号匹配的数字数组 */
-  const t = tsObj(); const len = t.beats*t.per;
-  let bars = Array.isArray(rec.bars) ? rec.bars.filter(Array.isArray) : [];
-  bars = bars.slice(0,8).map(b=>{
-    const nb = Array(len).fill(0);
-    for(let i=0;i<len && i<b.length;i++){ const v=Number(b[i]); nb[i]=(v===1||v===2)?v:0; }
-    return nb;
-  });
+  /* 迁移 bars → 新格式 [{cells}]：旧 flat 按其原拍号细分还原 */
+  let bars = migrateBars(rec.bars, rec.ts);
   S.bars = bars.length ? bars : [newBar()];
 
   currentId = rec.id;
@@ -1183,11 +1271,11 @@ function esc(s){
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
     .replace(/"/g,"&quot;");
 }
-function tsLabelOf(id){ const t = TS.find(x=>x.id===id); return t ? t.label : "4/4 八分"; }
+function tsLabelOf(id){ const t = TS.find(x=>x.id===tsNorm(id)); return t ? t.label : "4/4"; }
 
 /* 单条乐句 → Word(.doc)完整格式文档 */
 function phraseDocHTML(rec){
-  const t = TS.find(x=>x.id===rec.ts) || TS[2];
+  const t = TS.find(x=>x.id===tsNorm(rec.ts)) || TS[0];
   const title = `乐句 No.${rec.num||"?"}${rec.src?" · "+esc(rec.src):""}`;
   const dash = "—";
   const cell = v => v===1 ? "×" : v===2 ? "—" : "·";
@@ -1205,17 +1293,17 @@ function phraseDocHTML(rec){
 
   /* 节奏格子:每小节一张小表 */
   let rhythm = "";
-  (rec.bars||[]).forEach((bar,bi)=>{
+  migrateBars(rec.bars, rec.ts).forEach((bar,bi)=>{
     let labTr = "", valTr = "";
-    for(let beat=0;beat<t.beats;beat++){
-      for(let s=0;s<t.per;s++){
-        const lab = s===0 ? String(beat+1) : (t.labs[s]||"·");
-        const v = bar[beat*t.per+s];
+    bar.forEach((beat,bei)=>{
+      const sub = beat.cells.length;
+      beat.cells.forEach((v,s)=>{
+        const lab = s===0 ? String(bei+1) : (subLab(sub,s)||"·");
         const first = (s===0) ? " b1" : "";
         labTr += `<td class="rl${first}">${esc(lab)}</td>`;
         valTr += `<td class="rv${first}">${cell(v)}</td>`;
-      }
-    }
+      });
+    });
     rhythm += `<p class="barname">第 ${bi+1} 小节</p>`
       + `<table class="rhythm"><tr>${labTr}</tr><tr>${valTr}</tr></table>`;
   });
@@ -1417,6 +1505,7 @@ bind("skelBackBtn",skelBack); bind("skelClearBtn",skelClear);
 bind("vOk",()=>setVerdict("ok")); bind("vRe",()=>setVerdict("re"));
 bind("btnTxt",exportTxt); bind("btnNext",saveAndNext);
 bind("playBtn",togglePlay); bind("metBtn",toggleMet);
+bind("speedBox", openSpeedPicker); bind("atSpeedBox", openAtSpeedPicker);
 bind("tabRec",()=>switchView("rec")); bind("tabLib",()=>switchView("lib"));
 window.addEventListener("pagehide", stopPlay);
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden) stopPlay(); });
@@ -1429,13 +1518,14 @@ bind("themeBtn",toggleTheme);
    - 拨弦格(值1)合成 pluck 音;节拍器点每拍,小节首拍重音
    - 慢练 60%-100% 变速,chip 选中态用 Royal;不改动乐句数据
    ================================================================ */
-const SPEEDS = [60,70,80,90,100];
+const SPEEDS = [60,65,70,75,80,85,90,95,100];
 let audioCtx = null;
 let _noiseBuf = null;
 const player = {
   playing:false, metOn:false, speed:100,
-  step:0, nextTime:0, timer:null, rafId:null,
-  queue:[], cells:[], per:1, cellsPerBar:0, totalSteps:0
+  nextTime:0, timer:null, rafId:null,
+  queue:[], cells:[],
+  events:[], idx:0        /* 事件流：每格 {durBeats,val,beatStart,downbeat,domIndex} */
 };
 
 function ensureCtx(){
@@ -1449,7 +1539,27 @@ function ensureCtx(){
 }
 function baseBpm(){ return S.bpm!==null ? S.bpm : 80; }
 function effBpm(){ return Math.max(20, Math.round(baseBpm() * player.speed / 100)); }
-function secPerCell(){ return (60 / effBpm()) / tsObj().per; }
+function beatSec(){ return 60 / effBpm(); }   /* 一个主拍的秒长 */
+/* 由 S.bars 构建事件流：每格记录时长(以拍为单位)、拨弦值、是否拍首/强拍、DOM 序号 */
+function buildEvents(){
+  const evs = []; let dom = 0;
+  S.bars.forEach((bar,bi)=>{
+    (bar||[]).forEach((beat,bei)=>{
+      const cells = beat.cells || [];
+      const sub = Math.max(1, cells.length);
+      cells.forEach((v,ci)=>{
+        evs.push({
+          durBeats: 1/sub, val: v,
+          beatStart: ci===0,
+          downbeat: (bei===0 && ci===0),
+          domIndex: dom
+        });
+        dom++;
+      });
+    });
+  });
+  return evs;
+}
 
 /* -------- 合成音色 -------- */
 function pickNoise(){
@@ -1497,32 +1607,26 @@ function click(time, accent){
 }
 
 /* -------- 调度 -------- */
-function scheduleStep(step, time){
-  const cpb = player.cellsPerBar, per = player.per;
-  const cellIdx = step % cpb;
-  const bar = S.bars[Math.floor(step / cpb)];
-  const v = bar ? bar[cellIdx] : 0;
-  if(v === 1) pluck(time);
-  if(player.metOn && (cellIdx % per === 0)) click(time, cellIdx === 0);
-  player.queue.push({ step, time });
-}
 function scheduler(){
-  if(!audioCtx) return;
+  if(!audioCtx || !player.events.length) return;
   const ahead = 0.12;
   while(player.nextTime < audioCtx.currentTime + ahead){
-    scheduleStep(player.step, player.nextTime);
-    player.nextTime += secPerCell();
-    player.step = (player.step + 1) % player.totalSteps;
+    const ev = player.events[player.idx];
+    if(ev.val === 1) pluck(player.nextTime);
+    if(player.metOn && ev.beatStart) click(player.nextTime, ev.downbeat);
+    player.queue.push({ domIndex: ev.domIndex, time: player.nextTime });
+    player.nextTime += ev.durBeats * beatSec();
+    player.idx = (player.idx + 1) % player.events.length;
   }
 }
 function drawLoop(){
   if(!player.playing || !audioCtx) return;
   const now = audioCtx.currentTime;
-  let idx = -1;
-  while(player.queue.length && player.queue[0].time <= now){ idx = player.queue.shift().step; }
-  if(idx >= 0){
+  let dom = -1;
+  while(player.queue.length && player.queue[0].time <= now){ dom = player.queue.shift().domIndex; }
+  if(dom >= 0){
     player.cells.forEach(c=>c.classList.remove("playing"));
-    const c = player.cells[idx]; if(c) c.classList.add("playing");
+    const c = player.cells[dom]; if(c) c.classList.add("playing");
   }
   player.rafId = requestAnimationFrame(drawLoop);
 }
@@ -1531,12 +1635,10 @@ function drawLoop(){
 function startPlay(){
   if(typeof at3Stop === "function") at3Stop();
   if(!ensureCtx()){ toast("此浏览器不支持音频播放"); return; }
-  const t = tsObj();
-  player.per = t.per;
-  player.cellsPerBar = t.beats * t.per;
-  player.totalSteps = Math.max(1, S.bars.length * player.cellsPerBar);
+  player.events = buildEvents();
+  if(!player.events.length){ toast("先在节奏格里点几个音"); return; }
   player.cells = Array.from(document.querySelectorAll("#barsBox .cell"));
-  player.step = 0;
+  player.idx = 0;
   player.queue = [];
   player.nextTime = audioCtx.currentTime + 0.08;
   player.playing = true;
@@ -1576,22 +1678,17 @@ function updateTpBpm(){
   el.textContent = S.bpm===null ? `♩ ${b} · 未设速度` : `♩ ${b}`;
 }
 function drawTransport(){
-  const box = document.getElementById("speedChips");
-  if(box){
-    box.innerHTML = "";
-    SPEEDS.forEach(p=>{
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "chip" + (player.speed===p ? " on" : "");
-      b.textContent = p + "%";
-      b.onclick = ()=>{ player.speed = p; drawTransport(); updateTpBpm(); };
-      box.appendChild(b);
-    });
-  }
+  const box = document.getElementById("speedBox");
+  if(box) box.textContent = player.speed + "%";
   const met = document.getElementById("metBtn");
   if(met) met.classList.toggle("on", player.metOn);
   setPlayUI(player.playing);
   updateTpBpm();
+}
+function openSpeedPicker(){
+  openWheel("慢练速度", SPEEDS.map(p=>({value:p,label:p+"%"})), player.speed, p=>{
+    player.speed = p; drawTransport(); updateTpBpm();
+  });
 }
 
 /* ================================================================
@@ -1826,15 +1923,11 @@ function at3ToggleLoop(){
   if(at3.api) at3ApplyPlayback();
 }
 function drawAtSpeed(){
-  const box = document.getElementById("atSpeedChips"); if(!box) return;
-  box.innerHTML = "";
-  [60,70,80,90,100].forEach(p=>{
-    const b = document.createElement("button"); b.type="button";
-    b.className = "chip" + (at3.speed===p ? " on" : "");
-    b.textContent = p + "%";
-    b.onclick = ()=>at3SetSpeed(p);
-    box.appendChild(b);
-  });
+  const box = document.getElementById("atSpeedBox"); if(!box) return;
+  box.textContent = at3.speed + "%";
+}
+function openAtSpeedPicker(){
+  openWheel("慢练速度", SPEEDS.map(p=>({value:p,label:p+"%"})), at3.speed, p=>at3SetSpeed(p));
 }
 
 /* -------- 降级:合成拨弦音按 score 调度 -------- */
