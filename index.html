@@ -133,8 +133,51 @@
   .stepper button{width:48px;height:44px;background:var(--well);border:none;color:var(--ink);
     font-size:22px;font-weight:800;cursor:pointer;font-family:inherit}
   .stepper .val{min-width:64px;text-align:center;font-size:18px;font-weight:800;
-    background:var(--surface);color:var(--ink);font-variant-numeric:tabular-nums}
+    background:var(--surface);color:var(--ink);font-variant-numeric:tabular-nums;cursor:text}
+  .stepper .val input{width:64px;border:none;background:transparent;text-align:center;
+    font-size:18px;font-weight:800;color:var(--ink);font-family:inherit;outline:none;
+    -webkit-appearance:none;-moz-appearance:textfield;padding:0}
+  .stepper .val input::-webkit-outer-spin-button,
+  .stepper .val input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
   .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .fld{flex:0 0 auto}
+
+  /* ---------- 小框选择器（拍号等） ---------- */
+  .pickbox{height:44px;min-width:96px;padding:0 14px;border:1px solid var(--line);
+    border-radius:10px;background:var(--surface);color:var(--ink);font-size:18px;font-weight:800;
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;
+    font-family:inherit;font-variant-numeric:tabular-nums}
+  .pickbox::after{content:"▾";font-size:12px;color:var(--muted);font-weight:700}
+
+  /* ---------- 底部滚轮浮层 ---------- */
+  .sheet-mask{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:200;
+    display:flex;align-items:flex-end;justify-content:center;
+    opacity:0;pointer-events:none;transition:opacity .2s}
+  .sheet-mask.on{opacity:1;pointer-events:auto}
+  .sheet{width:100%;max-width:560px;background:var(--surface);
+    border-top-left-radius:20px;border-top-right-radius:20px;
+    box-shadow:0 -8px 40px rgba(0,0,0,.25);
+    padding:12px 18px calc(18px + env(safe-area-inset-bottom));
+    transform:translateY(24px);transition:transform .2s}
+  .sheet-mask.on .sheet{transform:translateY(0)}
+  .sheet-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .sheet-hd .st{font-size:15px;font-weight:800;color:var(--ink)}
+  .sheet-hd .sok{background:var(--royal);color:var(--on-royal);border:none;border-radius:9px;
+    padding:9px 18px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer}
+  .wheel-wrap{position:relative;height:200px}
+  .wheel{height:200px;overflow-y:auto;scroll-snap-type:y mandatory;
+    -webkit-overflow-scrolling:touch;
+    -webkit-mask-image:linear-gradient(180deg,transparent,#000 32%,#000 68%,transparent);
+    mask-image:linear-gradient(180deg,transparent,#000 32%,#000 68%,transparent)}
+  .wheel::-webkit-scrollbar{display:none}
+  .wheel .pad{height:80px}
+  .wheel .wi{height:40px;scroll-snap-align:center;display:flex;align-items:center;
+    justify-content:center;font-size:18px;font-weight:700;color:var(--muted);
+    cursor:pointer;transition:color .12s,font-size .12s}
+  .wheel .wi.sel{color:var(--amber);font-weight:800;font-size:21px}
+  .wheel-line{position:absolute;left:12px;right:12px;top:50%;transform:translateY(-50%);
+    height:40px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    pointer-events:none}
 
   /* ---------- 节奏格 ---------- */
   .bars{display:flex;flex-direction:column;gap:12px}
@@ -379,15 +422,19 @@
   <section>
     <div class="sec-title"><span class="sec-num">基本</span><span class="sec-name">这条乐句</span></div>
     <div class="row">
-      <div>
-        <label class="f">编号</label>
+      <div class="fld">
+        <label class="f">速度 BPM</label>
         <div class="stepper">
-          <button type="button" id="numMinus">−</button>
-          <div class="val" id="numVal">1</div>
-          <button type="button" id="numPlus">＋</button>
+          <button type="button" id="bpmMinus">−</button>
+          <div class="val" id="bpmVal" role="button" tabindex="0">— —</div>
+          <button type="button" id="bpmPlus">＋</button>
         </div>
       </div>
-      <div>
+      <div class="fld">
+        <label class="f">拍号</label>
+        <button type="button" class="pickbox" id="tsBox">4/4</button>
+      </div>
+      <div class="fld">
         <label class="f">日期</label>
         <input type="date" id="dateVal">
       </div>
@@ -414,25 +461,15 @@
     </div>
   </section>
 
-  <!-- 速度 -->
+  <!-- 骨架 -->
   <section>
-    <div class="sec-title"><span class="sec-num">速度</span><span class="sec-name">BPM</span></div>
-    <div class="row">
-      <div class="stepper">
-        <button type="button" id="bpmMinus">−</button>
-        <div class="val" id="bpmVal">— —</div>
-        <button type="button" id="bpmPlus">＋</button>
-      </div>
-      <span class="hint" style="margin:0">± 5 微调</span>
+    <div class="sec-title"><span class="sec-num">骨架</span><span class="sec-name">剥完剩下的音（≤ 4 个为宜）</span></div>
+    <div class="seq" id="skelSeq" data-empty="点下面的音名，按顺序排"></div>
+    <div class="chips" id="skelChips" style="margin-top:8px"></div>
+    <div class="seqbtns">
+      <button type="button" class="chip util" id="skelBackBtn">⌫ 退一个</button>
+      <button type="button" class="chip util" id="skelClearBtn">清空</button>
     </div>
-    <label class="f">常用速度直接点</label>
-    <div class="chips" id="bpmChips"></div>
-  </section>
-
-  <!-- 拍号 -->
-  <section>
-    <div class="sec-title"><span class="sec-num">拍号</span><span class="sec-name">决定节奏格的样子</span></div>
-    <div class="chips" id="tsChips"></div>
   </section>
 
   <!-- 落音 -->
@@ -511,16 +548,6 @@
     </div>
   </section>
 
-  <!-- 骨架 -->
-  <section>
-    <div class="sec-title"><span class="sec-num">骨架</span><span class="sec-name">剥完剩下的音（≤ 4 个为宜）</span></div>
-    <div class="seq" id="skelSeq" data-empty="点下面的音名，按顺序排"></div>
-    <div class="chips" id="skelChips" style="margin-top:8px"></div>
-    <div class="seqbtns">
-      <button type="button" class="chip util" id="skelBackBtn">⌫ 退一个</button>
-      <button type="button" class="chip util" id="skelClearBtn">清空</button>
-    </div>
-  </section>
 
   <!-- 验证 -->
   <section>
@@ -551,6 +578,19 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="sheet-mask" id="wheelMask">
+  <div class="sheet">
+    <div class="sheet-hd">
+      <span class="st" id="wheelTitle">选择</span>
+      <button type="button" class="sok" id="wheelOk">完成</button>
+    </div>
+    <div class="wheel-wrap">
+      <div class="wheel" id="wheelList"></div>
+      <div class="wheel-line"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 "use strict";
 /* ================================================================
@@ -563,17 +603,21 @@
 const NOTES = ["C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B"];
 const CHORD_TYPES = ["7","9","13","m7","maj7","m","大三","sus4","dim","其他"];
 const DEGREES = ["1","b2","2","b3","3","4","b5","5","b6","6","b7","7"];
-const BPM_PRESETS = [60,70,80,90,100,110,120,130,140,160];
+/* 纯拍号：beats=主拍数，per=默认每拍细分（阶段B将改为每拍可调） */
 const TS = [
-  { id:"24_8",  label:"2/4 八分",   beats:2, per:2, labs:["","&"] },
-  { id:"34_8",  label:"3/4 八分",   beats:3, per:2, labs:["","&"] },
-  { id:"44_8",  label:"4/4 八分",   beats:4, per:2, labs:["","&"] },
-  { id:"44_16", label:"4/4 十六分", beats:4, per:4, labs:["","e","&","a"] },
-  { id:"44_3",  label:"4/4 三连音", beats:4, per:3, labs:["","·","·"] },
-  { id:"68",    label:"6/8",        beats:2, per:3, labs:["","·","·"] },
-  { id:"98",    label:"9/8",        beats:3, per:3, labs:["","·","·"] },
-  { id:"128",   label:"12/8 shuffle", beats:4, per:3, labs:["","·","·"] }
+  { id:"44",  label:"4/4",  beats:4, per:2, labs:["","&"] },
+  { id:"34",  label:"3/4",  beats:3, per:2, labs:["","&"] },
+  { id:"24",  label:"2/4",  beats:2, per:2, labs:["","&"] },
+  { id:"22",  label:"2/2",  beats:2, per:2, labs:["","&"] },
+  { id:"54",  label:"5/4",  beats:5, per:2, labs:["","&"] },
+  { id:"68",  label:"6/8",  beats:2, per:3, labs:["","·","·"] },
+  { id:"98",  label:"9/8",  beats:3, per:3, labs:["","·","·"] },
+  { id:"128", label:"12/8", beats:4, per:3, labs:["","·","·"] },
+  { id:"78",  label:"7/8",  beats:7, per:1, labs:[""] }
 ];
+/* 旧记录拍号 id → 新拍号 id */
+const TS_ALIAS = { "24_8":"24", "34_8":"34", "44_8":"44", "44_16":"44", "44_3":"44" };
+function tsNorm(id){ return TS_ALIAS[id] || id; }
 
 /* ---------------- 当前乐句状态 ---------------- */
 let S = blankState(1);
@@ -586,7 +630,7 @@ function blankState(num){
   return {
     num:num, date:"", src:"", key:null,
     chordRoot:null, chordType:null, chords:[],
-    bpm:null, ts:"44_8",
+    bpm:null, ts:"44",
     landNote:null, degree:null,
     bars:[], dir:[], skel:[],
     ver:[false,false,false,false,false], verdict:null
@@ -682,11 +726,6 @@ function renderChips(boxId, items, getSel, setSel){
 }
 
 /* ---------------- 基本 ---------------- */
-function stepNum(d){
-  S.num = Math.max(1, S.num+d);
-  document.getElementById("numVal").textContent = S.num;
-  markDirty();
-}
 function setToday(){
   const t=new Date(), p=n=>String(n).padStart(2,"0");
   const v = `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
@@ -724,35 +763,90 @@ function drawChordSeq(){ document.getElementById("chordSeq").textContent = S.cho
 
 /* ---------------- 速度 ---------------- */
 function stepBpm(d){
-  S.bpm = S.bpm===null ? 60 : Math.min(300, Math.max(30, S.bpm+d));
+  S.bpm = S.bpm===null ? 80 : Math.min(300, Math.max(30, S.bpm+d));
   drawBpm(); markDirty();
 }
 function drawBpm(){
-  document.getElementById("bpmVal").textContent = S.bpm===null ? "— —" : S.bpm;
-  const box = document.getElementById("bpmChips"); box.innerHTML="";
-  BPM_PRESETS.forEach(v=>{
-    const b=document.createElement("button"); b.type="button";
-    b.className = "chip"+(S.bpm===v?" on":"");
-    b.textContent = v;
-    b.onclick = ()=>{ S.bpm = S.bpm===v?null:v; drawBpm(); markDirty(); };
-    box.appendChild(b);
-  });
+  const el = document.getElementById("bpmVal");
+  if(el) el.textContent = S.bpm===null ? "— —" : S.bpm;
   if(typeof updateTpBpm==="function") updateTpBpm();
+}
+/* 点数字直接键盘输入 */
+function editBpm(){
+  const el = document.getElementById("bpmVal");
+  if(!el || el.querySelector("input")) return;
+  const inp = document.createElement("input");
+  inp.type = "number"; inp.min = 30; inp.max = 300; inp.inputMode = "numeric";
+  inp.value = S.bpm===null ? "" : S.bpm;
+  el.textContent = ""; el.appendChild(inp);
+  inp.focus(); inp.select();
+  const commit = ()=>{
+    const v = parseInt(inp.value, 10);
+    if(!isNaN(v)) S.bpm = Math.min(300, Math.max(30, v));
+    drawBpm(); markDirty();
+  };
+  inp.addEventListener("blur", commit);
+  inp.addEventListener("keydown", e=>{ if(e.key==="Enter") inp.blur(); });
 }
 
 /* ---------------- 拍号 / 节奏格 ---------------- */
-function tsObj(){ return TS.find(t=>t.id===S.ts) || TS[2]; }
+function tsObj(){ const id = tsNorm(S.ts); return TS.find(t=>t.id===id) || TS[0]; }
 function drawTS(){
-  const box = document.getElementById("tsChips"); box.innerHTML="";
-  TS.forEach(t=>{
-    const b=document.createElement("button");
-    b.type="button"; b.className="chip"+(S.ts===t.id?" on":"");
-    b.textContent = t.label;
-    b.onclick = ()=>{
-      if(S.ts!==t.id){ S.ts=t.id; S.bars=[newBar()]; drawTS(); drawBars(); markDirty(); }
-    };
-    box.appendChild(b);
+  const b = document.getElementById("tsBox");
+  if(b) b.textContent = tsObj().label;
+}
+function openTsPicker(){
+  openWheel("拍号", TS.map(t=>({value:t.id, label:t.label})), tsObj().id, id=>{
+    if(tsNorm(S.ts)!==id){ S.ts=id; S.bars=[newBar()]; drawTS(); drawBars(); markDirty(); }
   });
+}
+
+/* ---------------- 通用滚轮选择器 ---------------- */
+let _wheel = null;          /* {options,onPick,list} */
+let _wheelSel = null;       /* 当前居中值 */
+let _wheelSnapTimer = null;
+function openWheel(title, options, current, onPick){
+  const mask = document.getElementById("wheelMask");
+  const list = document.getElementById("wheelList");
+  document.getElementById("wheelTitle").textContent = title;
+  list.innerHTML = "";
+  const p1 = document.createElement("div"); p1.className="pad"; list.appendChild(p1);
+  options.forEach((o,i)=>{
+    const it = document.createElement("div"); it.className="wi";
+    it.textContent = o.label; it.dataset.i = i;
+    it.onclick = ()=>{ onPick(o.value); closeWheel(); };
+    list.appendChild(it);
+  });
+  const p2 = document.createElement("div"); p2.className="pad"; list.appendChild(p2);
+  _wheel = { options, onPick, list };
+  let idx = options.findIndex(o=>o.value===current); if(idx<0) idx=0;
+  _wheelSel = options[idx].value;
+  mask.classList.add("on");
+  requestAnimationFrame(()=>{
+    const items = list.querySelectorAll(".wi");
+    const t = items[idx];
+    if(t) list.scrollTop = t.offsetTop - list.clientHeight/2 + t.clientHeight/2;
+    markWheelSel();
+  });
+}
+function markWheelSel(){
+  if(!_wheel) return;
+  const list = _wheel.list, mid = list.scrollTop + list.clientHeight/2;
+  let best=null, bestD=1e9;
+  list.querySelectorAll(".wi").forEach(it=>{
+    const c = it.offsetTop + it.clientHeight/2, d = Math.abs(c-mid);
+    it.classList.remove("sel");
+    if(d<bestD){ bestD=d; best=it; }
+  });
+  if(best){ best.classList.add("sel"); _wheelSel = _wheel.options[+best.dataset.i].value; }
+}
+function wheelConfirm(){
+  if(_wheel && _wheelSel!=null) _wheel.onPick(_wheelSel);
+  closeWheel();
+}
+function closeWheel(){
+  document.getElementById("wheelMask").classList.remove("on");
+  _wheel = null; _wheelSel = null;
 }
 function newBar(){ const t=tsObj(); return Array(t.beats*t.per).fill(0); }
 function addBar(){ if(S.bars.length<8){ S.bars.push(newBar()); drawBars(); markDirty(); } }
@@ -914,7 +1008,7 @@ async function startFresh(){
   currentCreatedAt = Date.now();
   currentLastReview = null;
   everSaved = false;
-  document.getElementById("numVal").textContent = S.num;
+  { const _nv=document.getElementById("numVal"); if(_nv) _nv.textContent = S.num; }
   document.getElementById("srcVal").value = "";
   setToday();
   drawAll();
@@ -935,7 +1029,7 @@ function loadRecord(rec){
     chordRoot: rec.chordRoot??null, chordType: rec.chordType??null,
     chords: Array.isArray(rec.chords)?rec.chords.slice(0,8):[],
     bpm: (typeof rec.bpm==="number")?rec.bpm:null,
-    ts: TS.some(t=>t.id===rec.ts)?rec.ts:"44_8",
+    ts: (function(x){ const id=tsNorm(x); return TS.some(t=>t.id===id)?id:"44"; })(rec.ts),
     landNote: rec.landNote??null, degree: rec.degree??null,
     dir: Array.isArray(rec.dir)?rec.dir.slice(0,8):[],
     skel: Array.isArray(rec.skel)?rec.skel.slice(0,6):[],
@@ -956,7 +1050,7 @@ function loadRecord(rec){
   currentCreatedAt = rec.createdAt || Date.now();
   currentLastReview = rec.lastReview || null;
   everSaved = true;
-  document.getElementById("numVal").textContent = S.num;
+  { const _nv=document.getElementById("numVal"); if(_nv) _nv.textContent = S.num; }
   document.getElementById("srcVal").value = S.src;
   document.getElementById("dateVal").value = S.date;
   drawAll();
@@ -1305,8 +1399,16 @@ function drawAll(){
 
 /* ---------------- 事件绑定 ---------------- */
 function bind(id,fn){ const el=document.getElementById(id); if(el) el.addEventListener("click",fn); }
-bind("numMinus",()=>stepNum(-1));  bind("numPlus",()=>stepNum(1));
-bind("bpmMinus",()=>stepBpm(-5));  bind("bpmPlus",()=>stepBpm(5));
+bind("bpmMinus",()=>stepBpm(-1));  bind("bpmPlus",()=>stepBpm(1));
+bind("bpmVal", editBpm);
+bind("tsBox", openTsPicker);
+bind("wheelOk", wheelConfirm);
+(function(){
+  const mask = document.getElementById("wheelMask");
+  if(mask) mask.addEventListener("click", e=>{ if(e.target===mask) closeWheel(); });
+  const list = document.getElementById("wheelList");
+  if(list) list.addEventListener("scroll", ()=>{ requestAnimationFrame(markWheelSel); });
+})();
 bind("chordAddBtn",chordAdd); bind("chordBackBtn",chordBack); bind("chordClearBtn",chordClear);
 bind("addBarBtn",addBar);
 bind("dirUpBtn",()=>dirAdd("↑")); bind("dirDownBtn",()=>dirAdd("↓")); bind("dirFlatBtn",()=>dirAdd("→"));
@@ -1844,7 +1946,7 @@ initTheme();
   drawAll();
   try{
     const n = await maxNum();
-    if(n >= S.num){ S.num = n+1; document.getElementById("numVal").textContent = S.num; }
+    if(n >= S.num){ S.num = n+1; { const _nv=document.getElementById("numVal"); if(_nv) _nv.textContent = S.num; } }
     setSaveState(n>0 ? `库里已有记录,新乐句从 No.${S.num} 开始` : "新乐句 · 尚未填写");
     updateReviewBadge();
   }catch(e){
