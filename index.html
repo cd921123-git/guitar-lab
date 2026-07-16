@@ -361,6 +361,8 @@
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;-webkit-appearance:none;box-sizing:border-box}
   .attex:focus{border-color:var(--amber);outline:none}
   .atstatus{font-size:12px;color:var(--muted);margin-top:8px}
+  .at-render-ctl{margin-top:12px}
+  .at-render-ctl .chip{border-color:var(--line)}
   .atstatus.err{color:var(--err)}
   .atstatus.ok{color:var(--ok)}
   .atwrap{margin-top:10px;background:var(--surface);border:1px solid var(--line-soft);
@@ -549,6 +551,9 @@
         <span class="tp-cap">慢练</span>
         <button type="button" class="pickbox speedbox" id="atSpeedBox">100%</button>
       </div>
+    </div>
+    <div class="at-render-ctl">
+      <button type="button" class="chip util" id="atResetBtn">🗑 重做（清空音序与谱面，重新点）</button>
     </div>
     <div class="atstatus" id="atStatus">引擎未加载 · 点「渲染谱面」开始(首次加载约 1 MB)</div>
     <div class="atwrap" id="atWrap" hidden><div id="atMain"></div></div>
@@ -1962,6 +1967,18 @@ function at3Stop(){
   if(at3.api && at3.playing){ try{ at3.api.stop(); }catch(e){} at3.playing = false; }
   at3FbStop();
 }
+/* 重做:清空音序 + 清掉已渲染谱面，回到干净状态（保留节奏） */
+function at3Reset(){
+  at3Stop();
+  atNotes = [];
+  drawNoteSeq();
+  if(at3.api){ try{ at3.api.destroy(); }catch(e){} }
+  at3.api = null; at3.rendered = false; at3.sfOk = false;
+  const wrap = document.getElementById("atWrap");
+  if(wrap){ wrap.hidden = true; const mn=document.getElementById("atMain"); if(mn) mn.innerHTML=""; }
+  at3Status("已重做 · 重新点音后再点「渲染谱面」");
+  toast("已清空谱面，可重新点音");
+}
 function at3PlayUI(){
   const b = document.getElementById("atPlayBtn");
   if(!b) return;
@@ -2091,6 +2108,7 @@ drawNoteSeq();
 drawAtSpeed();
 (function(){ const b=document.getElementById("tapMuteBtn"); if(b&&tapMute){ b.textContent="🔇 点音静音"; b.classList.add("on"); } })();
 bind("atRenderBtn", at3Render);
+bind("atResetBtn", at3Reset);
 bind("atPlayBtn", at3Play);
 bind("atMetBtn", at3ToggleMet);
 bind("atLoopBtn", at3ToggleLoop);
