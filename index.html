@@ -60,30 +60,40 @@
     --savebar:rgba(250,250,247,.88);
     --glass-surface:rgba(250,250,247,.72);
     --glass-edge:rgba(255,255,255,.55);
+    --sheen:rgba(255,255,255,.5);
+    --glow-royal:rgba(28,48,96,0);
+    --glow-amber:rgba(212,118,59,0);
     --amb-a:rgba(212,118,59,.12);
     --amb-b:rgba(28,48,96,.09);
     --amb-c:rgba(201,154,61,.10);
+    --vig:0;
+    --noise:0;
   }
   :root[data-theme="dark"]{
     color-scheme: dark;
-    --bg:#4A4A48;            /* Slate Mid 主舞台 */
-    --surface:rgba(25,25,25,.32); /* 同系透明层做卡片 */
-    --well:#191919;          /* Slate Dark 最深井 */
-    --line:#6B6B68;          /* Slate Soft 边框 */
-    --line-soft:rgba(250,250,247,.10);
+    --bg:#0B0A09;            /* 近黑舞台 */
+    --surface:#171512;       /* 小件实底(指板格/音pill/谱面容器) */
+    --well:#131110;          /* 最深井(输入/节奏条) */
+    --line:rgba(255,255,255,.16);
+    --line-soft:rgba(255,255,255,.08);
     --ink:#FAFAF7;           /* Ivory Light 主字 */
-    --body:#D9D3C1;          /* Bone Deep 次字 */
-    --muted:#B5B0A2;
+    --body:#CFC9BC;          /* Bone 系次字 */
+    --muted:#918C81;
     --on-anchor:#191919;
     --on-royal:#FAFAF7;
-    --cell-empty:#3E3E3C;
-    --sheet:rgba(32,32,31,.92); /* 底部浮层：玻璃 */
-    --savebar:rgba(30,30,29,.88);
-    --glass-surface:rgba(25,25,25,.58);
+    --cell-empty:#1B1815;
+    --sheet:rgba(20,18,16,.94);
+    --savebar:rgba(16,15,13,.80);
+    --glass-surface:rgba(22,20,17,.62);
     --glass-edge:rgba(255,255,255,.07);
-    --amb-a:rgba(212,118,59,.17);
-    --amb-b:rgba(46,74,133,.22);
-    --amb-c:rgba(201,154,61,.11);
+    --sheen:rgba(255,255,255,.045);
+    --glow-royal:rgba(46,74,133,.45);
+    --glow-amber:rgba(212,118,59,.30);
+    --amb-a:rgba(212,118,59,.20);   /* 琥珀极光 */
+    --amb-b:rgba(46,74,133,.26);    /* 皇家蓝辉光 */
+    --amb-c:rgba(201,154,61,.12);
+    --vig:.55;                       /* 边缘暗角 */
+    --noise:.05;                     /* 颗粒 */
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--body);
@@ -93,11 +103,16 @@
   /* 环境层:固定的品牌色斑,滚动时玻璃件从其上方掠过,毛玻璃才可见 */
   body::before{content:"";position:fixed;inset:-12%;z-index:-1;pointer-events:none;
     background:
-      radial-gradient(42% 34% at 16% 10%, var(--amb-a), transparent 70%),
-      radial-gradient(50% 42% at 86% 30%, var(--amb-b), transparent 70%),
-      radial-gradient(46% 38% at 50% 88%, var(--amb-c), transparent 72%),
-      radial-gradient(30% 26% at 30% 55%, var(--amb-b), transparent 74%);
+      radial-gradient(52% 40% at 14% 6%, var(--amb-a), transparent 68%),
+      radial-gradient(56% 46% at 88% 24%, var(--amb-b), transparent 70%),
+      radial-gradient(44% 38% at 46% 92%, var(--amb-c), transparent 72%),
+      radial-gradient(30% 26% at 32% 56%, var(--amb-b), transparent 74%),
+      radial-gradient(130% 100% at 50% 0%, transparent 55%, rgba(0,0,0,var(--vig)) 100%);
     transition:opacity .25s ease}
+  /* 颗粒质感层(仅深色可见) */
+  body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+    opacity:var(--noise);
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
   .wrap{max-width:560px;margin:0 auto;
     padding:var(--sp-3) var(--sp-3) calc(118px + env(safe-area-inset-bottom))}
 
@@ -115,18 +130,17 @@
   .brandrow{display:flex;align-items:center;gap:10px;
     position:sticky;top:var(--sp-2);z-index:20;
     padding:var(--sp-2) var(--sp-3);margin:0 calc(-1 * var(--sp-1));
-    border-radius:var(--r-m);border:1px solid transparent;
-    transition:background-color var(--dur-base) var(--ease-out),
-      border-color var(--dur-base) var(--ease-out)}
-  .brandrow.stuck{background:var(--savebar);
+    border-radius:18px;border:1px solid var(--line-soft);
+    background:var(--savebar);
     -webkit-backdrop-filter:blur(36px) saturate(1.8);
     backdrop-filter:blur(36px) saturate(1.8);
-    border-color:var(--line-soft);
-    box-shadow:inset 0 1px 0 var(--glass-edge)}
+    box-shadow:inset 0 1px 0 var(--glass-edge);
+    transition:box-shadow var(--dur-base) var(--ease-out)}
+  .brandrow.stuck{box-shadow:inset 0 1px 0 var(--glass-edge), 0 10px 30px rgba(0,0,0,.35)}
   .brandrow .mark{width:30px;height:auto;color:var(--amber);flex:none}
   .brandrow h1{font-size:21px;font-weight:800;letter-spacing:.12em;margin:0;color:var(--ink)}
   .brandrow .spacer{flex:1}
-  .iconbtn{width:40px;height:40px;border-radius:var(--r-s);border:1px solid var(--line);
+  .iconbtn{width:40px;height:40px;border-radius:var(--r-full);border:1px solid var(--line);
     background:transparent;color:var(--muted);font-size:17px;cursor:pointer;
     display:flex;align-items:center;justify-content:center;
     transition:background .15s,color .15s}
@@ -134,11 +148,14 @@
   .byline{margin:3px 0 12px 40px;font-size:11.5px;color:var(--muted);letter-spacing:.06em}
 
   /* ---------- 页签 ---------- */
-  .tabs{display:flex;gap:8px;margin:0 0 4px}
-  .tab{flex:1;min-height:42px;border-radius:var(--r-s);border:1px solid var(--line);
+  .tabs{display:flex;gap:4px;margin:0 0 4px;padding:4px;
+    border:1px solid var(--line-soft);border-radius:var(--r-full);
+    background:var(--glass-surface);
+    box-shadow:inset 0 1px 0 var(--glass-edge)}
+  .tab{flex:1;min-height:40px;border-radius:var(--r-full);border:1px solid transparent;
     background:transparent;color:var(--body);font-size:15px;font-weight:600;cursor:pointer;
     font-family:inherit;transition:background .15s,color .15s,border-color .15s}
-  .tab.on{background:var(--royal);border-color:var(--royal);color:var(--on-royal)}
+  .tab.on{background:var(--royal);border-color:var(--royal);color:var(--on-royal);box-shadow:0 0 16px var(--glow-royal)}
   .savestate{font-size:11.5px;color:var(--muted);margin:8px 2px 10px;min-height:14px;
     font-variant-numeric:tabular-nums}
 
@@ -149,6 +166,7 @@
 
   /* ---------- 区块 ---------- */
   section{background:var(--glass-surface);border:1px solid var(--line-soft);border-radius:var(--r-m);
+    background-image:linear-gradient(180deg, var(--sheen), rgba(255,255,255,0) 26%);
     padding:var(--sp-4);margin-bottom:var(--sp-4);
     -webkit-backdrop-filter:blur(20px) saturate(1.5);
     backdrop-filter:blur(20px) saturate(1.5);
@@ -296,16 +314,16 @@
     background:var(--savebar);
     -webkit-backdrop-filter:blur(36px) saturate(1.8);
     backdrop-filter:blur(36px) saturate(1.8);
-    border:1px solid var(--line-soft);border-radius:var(--r-l);
-    box-shadow:inset 0 1px 0 var(--glass-edge), 0 8px 28px rgba(0,0,0,.14);
+    border:1px solid var(--line-soft);border-radius:26px;
+    box-shadow:inset 0 1px 0 var(--glass-edge), 0 8px 28px rgba(0,0,0,.20);
     padding:10px var(--sp-3)}
   .savebar.mini{transform:scale(.8) translateY(14px);opacity:.92}
   .savebar .inner{display:flex;gap:10px}
-  .savebar button{min-height:48px;border-radius:var(--r-m);font-size:15.5px;font-weight:700;
+  .savebar button{min-height:48px;border-radius:var(--r-full);font-size:15.5px;font-weight:700;
     cursor:pointer;font-family:inherit}
   .savebar button:active{transform:scale(.98)}
   .btn-ghost{flex:1;background:transparent;border:1px solid var(--line);color:var(--body)}
-  .btn-primary{flex:1.4;background:var(--amber);border:1px solid var(--amber);color:var(--on-anchor)}
+  .btn-primary{flex:1.4;background:var(--amber);border:1px solid var(--amber);color:var(--on-anchor);box-shadow:0 4px 20px var(--glow-amber)}
 
   /* ---------- 乐句库 ---------- */
   .libtools{display:flex;gap:8px;margin-bottom:14px}
@@ -318,6 +336,7 @@
     display:none;align-items:center;justify-content:center;line-height:18px;font-variant-numeric:tabular-nums}
   .tab .dueflag.show{display:inline-flex}
   .review{background:var(--glass-surface);border:1px solid var(--line-soft);border-radius:var(--r-m);
+    background-image:linear-gradient(180deg, var(--sheen), rgba(255,255,255,0) 26%);
     -webkit-backdrop-filter:blur(20px) saturate(1.5);
     backdrop-filter:blur(20px) saturate(1.5);
     box-shadow:inset 0 1px 0 var(--glass-edge);
@@ -375,6 +394,7 @@
   .stats-empty{font-size:12.5px;color:var(--muted)}
   .libcount{font-size:12px;color:var(--muted);margin:0 2px 10px}
   .card{background:var(--glass-surface);border:1px solid var(--line-soft);border-radius:var(--r-m);
+    background-image:linear-gradient(180deg, var(--sheen), rgba(255,255,255,0) 26%);
     -webkit-backdrop-filter:blur(20px) saturate(1.5);
     backdrop-filter:blur(20px) saturate(1.5);
     box-shadow:inset 0 1px 0 var(--glass-edge);
@@ -1642,7 +1662,7 @@ function switchView(v){
 }
 
 /* ---------------- 主题 ---------------- */
-const THEME_BG = { light:"#F0EDE3", dark:"#4A4A48" };
+const THEME_BG = { light:"#F0EDE3", dark:"#0B0A09" };
 function applyTheme(t){
   document.documentElement.dataset.theme = t;
   document.getElementById("metaTheme").setAttribute("content", THEME_BG[t]);
