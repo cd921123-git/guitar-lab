@@ -404,6 +404,18 @@
   .note-pill .n{font-size:10px;color:var(--muted);font-weight:700}
   .note-pill.rest{color:var(--muted);font-style:italic}
   .note-pill:active{transform:scale(.95)}
+  /* ---- 批次D ---- */
+  .keylab{font-size:11px;color:var(--muted);margin:10px 0 6px;font-weight:700;letter-spacing:.5px}
+  .note-pill.sel{border-color:var(--royal);box-shadow:inset 0 0 0 1.5px var(--royal)}
+  .note-pill.dragging{opacity:.35}
+  .note-pill.ins-before{box-shadow:-3px 0 0 0 var(--amber)}
+  .note-pill.ins-after{box-shadow:3px 0 0 0 var(--amber)}
+  .note-seq.drop-end{box-shadow:inset 0 0 0 1.5px var(--amber)}
+  .note-pill,.fret-cell{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .drag-ghost{position:fixed;z-index:999;pointer-events:none;padding:6px 11px;border-radius:9px;
+    background:var(--surface);border:1.5px solid var(--amber);color:var(--ink);font-size:13px;
+    font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,.28);transform:translate(-50%,-130%);
+    font-variant-numeric:tabular-nums;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -463,7 +475,10 @@
     <label class="f">来源（歌 / 演奏者 / 大概位置）</label>
     <input type="text" id="srcVal" placeholder="例：SRV《Pride and Joy》第一段 solo 开头">
     <label class="f">调</label>
-    <div class="chips" id="keyChips"></div>
+    <div class="keylab">大调</div>
+    <div class="chips" id="keyChipsMaj"></div>
+    <div class="keylab">小调</div>
+    <div class="chips" id="keyChipsMin"></div>
   </section>
 
   <!-- 和弦序列 -->
@@ -528,13 +543,21 @@
   <!-- 谱面(点指板拼谱 · 联动节奏播放) -->
   <section>
     <div class="sec-title"><span class="sec-num">谱面</span><span class="sec-name">点指板拼谱 · 按节奏试奏</span></div>
-    <p class="hint">按你在「节奏」里排的顺序点音(行 = 弦,1 弦最细;列 = 品位)。节奏里每个 <b>x</b> 会自动对上你点的第 N 个音,<b>—</b> 延音、<b>·</b> 休止。点「渲染」看谱、点「播放」按节奏试奏。</p>
+    <p class="hint">点指板把音追加到音序(行 = 弦,1 弦最细;列 = 品位)。节奏里每个 <b>x</b> 自动对上第 N 个音,<b>—</b> 延音、<b>·</b> 休止。改中间的音:点音序里的音<b>选中</b> → 点指板即替换,或用下方「插入 / 删除」;<b>长按</b>音可拖动排序,指板上的音也能长按拖进音序任意位置。</p>
     <div class="fret-tools">
       <button type="button" class="chip util" id="tapMuteBtn">🔊 点音有声</button>
     </div>
     <div class="fret-wrap"><div class="fret-grid" id="fretGrid"></div></div>
     <div class="at-link" id="atLink">节奏 0 拨弦位 · 已点 0 音</div>
     <div class="note-seq" id="noteSeq" data-empty="还没点音 · 点指板开始"></div>
+    <div id="noteEditBar" hidden>
+      <p class="hint" id="noteEditHint" style="margin:8px 0 6px"></p>
+      <div class="seqbtns" style="margin-top:0">
+        <button type="button" class="chip" id="selInsBtn">＋ 在其后插入</button>
+        <button type="button" class="chip util" id="selDelBtn">删除此音</button>
+        <button type="button" class="chip util" id="selOffBtn">取消选中</button>
+      </div>
+    </div>
     <div class="seqbtns">
       <button type="button" class="chip" id="atRenderBtn" style="border-color:var(--amber)">渲染谱面</button>
       <button type="button" class="chip" id="skelImportBtn">导入骨架</button>
@@ -553,7 +576,7 @@
       </div>
     </div>
     <div class="at-render-ctl">
-      <button type="button" class="chip util" id="atResetBtn">🗑 重做（清空音序与谱面，重新点）</button>
+      <button type="button" class="chip util" id="atResetBtn">🗑 重做（只清渲染的谱面，音序保留）</button>
     </div>
     <div class="atstatus" id="atStatus">引擎未加载 · 点「渲染谱面」开始(首次加载约 1 MB)</div>
     <div class="atwrap" id="atWrap" hidden><div id="atMain"></div></div>
@@ -573,16 +596,6 @@
   </section>
 
 
-  <!-- 验证 -->
-  <section>
-    <div class="sec-title"><span class="sec-num">验证</span><span class="sec-name">拿到伴奏上现编五句</span></div>
-    <p class="hint">骨架不变：换节奏、换落音时值、换力度、上行改下行。没有一句是原句。</p>
-    <div class="chips" id="verChips"></div>
-    <div class="verdict">
-      <button type="button" class="chip ok" id="vOk">✓ 拆到骨头，归入骨架本</button>
-      <button type="button" class="chip re" id="vRe">↩ 装饰没剥净，回炉</button>
-    </div>
-  </section>
   </div><!-- /viewRec -->
 
   <!-- ================= 乐句库视图 ================= -->
@@ -625,6 +638,11 @@
 
 /* ---------------- 数据常量 ---------------- */
 const NOTES = ["C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B"];
+const MINOR_KEYS = NOTES.map(n=>n+"m");
+function keyDisp(k){
+  if(!k) return null;
+  return /m$/.test(k) ? k.slice(0,-1)+" 小调" : k+" 大调";
+}
 const CHORD_TYPES = ["7","9","13","m7","maj7","m","大三","sus4","dim","其他"];
 const DEGREES = ["1","b2","2","b3","3","4","b5","5","b6","6","b7","7"];
 /* 纯拍号：beats=主拍数，per=默认每拍细分（阶段B将改为每拍可调） */
@@ -719,7 +737,7 @@ function blankState(num){
     bpm:null, ts:"44",
     landNote:null, degree:null,
     bars:[], dir:[], skel:[],
-    ver:[false,false,false,false,false], verdict:null
+    verdict:null
   };
 }
 function newId(){
@@ -729,7 +747,6 @@ function newId(){
 function isEmptyState(){
   return !S.src && !S.key && S.chords.length===0 && S.bpm===null &&
     !S.landNote && !S.degree && S.dir.length===0 && S.skel.length===0 &&
-    !S.ver.some(v=>v) && S.verdict===null &&
     !S.bars.some(bar=>(bar||[]).some(be=>be&&be.cells&&be.cells.some(c=>c!==0)));
 }
 
@@ -823,10 +840,16 @@ document.addEventListener("input", e=>{
   if(e.target.id==="srcVal"){ S.src = e.target.value; markDirty(); }
 });
 function drawKey(){
-  renderChips("keyChips", NOTES, ()=>S.key, v=>{
+  const set = v=>{
     S.key = v;
-    if(v && S.chordRoot===null){ S.chordRoot = v; drawChordRoot(); }
-  });
+    if(v && S.chordRoot===null){
+      S.chordRoot = /m$/.test(v) ? v.slice(0,-1) : v;
+      drawChordRoot();
+    }
+    drawKey();          /* 大调/小调两组互斥,重绘双组 */
+  };
+  renderChips("keyChipsMaj", NOTES, ()=>S.key, set);
+  renderChips("keyChipsMin", MINOR_KEYS, ()=>S.key, set);
 }
 
 /* ---------------- 和弦序列 ---------------- */
@@ -1016,24 +1039,6 @@ function drawSkelChips(){
   });
 }
 
-/* ---------------- 验证 ---------------- */
-function drawVer(){
-  const box=document.getElementById("verChips"); box.innerHTML="";
-  for(let i=0;i<5;i++){
-    const b=document.createElement("button"); b.type="button";
-    b.className="chip"+(S.ver[i]?" on":"");
-    b.textContent="句 "+(i+1)+(S.ver[i]?" ✓":"");
-    b.onclick=()=>{ S.ver[i]=!S.ver[i]; drawVer(); markDirty(); };
-    box.appendChild(b);
-  }
-}
-function setVerdict(v){
-  S.verdict = S.verdict===v ? null : v;
-  document.getElementById("vOk").classList.toggle("on", S.verdict==="ok");
-  document.getElementById("vRe").classList.toggle("on", S.verdict==="re");
-  markDirty();
-}
-
 /* ---------------- 导出文本(单条) ---------------- */
 function pad(s,w){ s=String(s); while(s.length<w) s+=" "; return s; }
 function snapshotTXT(){
@@ -1044,7 +1049,7 @@ function snapshotTXT(){
   L.push("══════════════════════════════════");
   L.push(`日期    ${S.date||"__"}`);
   L.push(`来源    ${S.src||"__"}`);
-  L.push(`调      ${S.key||"__"}`);
+  L.push(`调      ${keyDisp(S.key)||"__"}`);
   L.push(`和弦    ${S.chords.length?S.chords.join(" → "):"__"}`);
   L.push(`速度    ${S.bpm!==null?"BPM "+S.bpm:"__"}`);
   L.push(`拍号    ${t.label}`);
@@ -1073,8 +1078,6 @@ function snapshotTXT(){
   L.push("── 骨架 ──────────────────────────");
   L.push(S.skel.join(" — ")||"__");
   L.push("");
-  L.push("── 验证：现编五句 ─────────────────");
-  L.push(S.ver.map((v,i)=>`句${i+1}${v?"✓":"✗"}`).join("  "));
   L.push(`结论：${S.verdict==="ok"?"拆到骨头，归入骨架本":S.verdict==="re"?"装饰没剥净，回炉":"（未判定）"}`);
   L.push("══════════════════════════════════");
   return L.join("\n");
@@ -1112,7 +1115,7 @@ async function startFresh(){
   const n = await maxNum();
   S = blankState(n+1);
   S.bars = [newBar()];
-  if(typeof atNotes!=="undefined"){ atNotes = []; if(typeof drawNoteSeq==="function") drawNoteSeq(); }
+  if(typeof atNotes!=="undefined"){ atNotes = []; atSel = -1; atInsert = false; if(typeof drawNoteSeq==="function") drawNoteSeq(); }
   currentId = newId();
   currentCreatedAt = Date.now();
   currentLastReview = null;
@@ -1142,7 +1145,6 @@ function loadRecord(rec){
     landNote: rec.landNote??null, degree: rec.degree??null,
     dir: Array.isArray(rec.dir)?rec.dir.slice(0,8):[],
     skel: Array.isArray(rec.skel)?rec.skel.slice(0,6):[],
-    ver: (Array.isArray(rec.ver)&&rec.ver.length===5)?rec.ver.map(Boolean):[false,false,false,false,false],
     verdict: (rec.verdict==="ok"||rec.verdict==="re")?rec.verdict:null
   });
   /* 迁移 bars → 新格式 [{cells}]：旧 flat 按其原拍号细分还原 */
@@ -1158,6 +1160,7 @@ function loadRecord(rec){
       if(n && typeof n.as==="string") o.as = n.as;
       return o;
     });
+    atSel = -1; atInsert = false;
     if(typeof drawNoteSeq==="function") drawNoteSeq();
   }
 
@@ -1310,7 +1313,7 @@ function phraseDocHTML(rec){
   const metaRows = [
     ["日期", rec.date || dash],
     ["来源", rec.src || dash],
-    ["调",   rec.key ? rec.key+" 调" : dash],
+    ["调",   keyDisp(rec.key) || dash],
     ["和弦进行", (rec.chords&&rec.chords.length) ? rec.chords.join(" → ") : dash],
     ["速度", (typeof rec.bpm==="number") ? "BPM "+rec.bpm : dash],
     ["拍号", t.label],
@@ -1338,7 +1341,6 @@ function phraseDocHTML(rec){
 
   const dir  = (rec.dir&&rec.dir.length)  ? esc(rec.dir.join("  ")) : `<span class="empty">(未记录)</span>`;
   const skel = (rec.skel&&rec.skel.length)? esc(rec.skel.join("  —  ")) : `<span class="empty">(未记录)</span>`;
-  const ver  = (Array.isArray(rec.ver)?rec.ver:[]).map((v,i)=>`句${i+1} ${v?"✓":"✗"}`).join("　") || `<span class="empty">(未验证)</span>`;
 
   return `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
@@ -1381,9 +1383,6 @@ function phraseDocHTML(rec){
  <h2>骨架音</h2>
  <p class="big">${skel}</p>
 
- <h2>验证 · 凭骨架现编五句</h2>
- <p class="big">${ver}</p>
-
  <p class="foot">导出于 ${new Date().toLocaleString("zh-CN")} · 乐句 No.${rec.num||"?"}</p>
 </body></html>`;
 }
@@ -1405,7 +1404,7 @@ function libCardEl(rec){
   const top = document.createElement("div"); top.className="card-top";
   const no = document.createElement("span"); no.className="no"; no.textContent = `No.${rec.num||"?"}`;
   const key = document.createElement("span"); key.className="key";
-  key.textContent = rec.key ? `${rec.key} 调` : "未定调";
+  key.textContent = keyDisp(rec.key) || "未定调";
   const flex = document.createElement("span"); flex.className="flex";
   const badge = document.createElement("span");
   if(rec.verdict==="ok"){ badge.className="badge ok"; badge.textContent="骨架本"; }
@@ -1471,7 +1470,7 @@ async function renderLib(){
 
 /* ---------------- 视图切换 ---------------- */
 function switchView(v){
-  stopPlay();
+  stopAllAudio();
   const rec = v==="rec";
   document.getElementById("viewRec").classList.toggle("on", rec);
   document.getElementById("viewLib").classList.toggle("on", !rec);
@@ -1504,9 +1503,7 @@ function toggleTheme(){
 /* ---------------- 汇总重绘 ---------------- */
 function drawAll(){
   drawKey(); drawChordRoot(); drawChordType(); drawChordSeq(); drawBpm();
-  drawTS(); drawBars(); drawDir(); drawSkel(); drawSkelChips(); drawVer();
-  document.getElementById("vOk").classList.toggle("on", S.verdict==="ok");
-  document.getElementById("vRe").classList.toggle("on", S.verdict==="re");
+  drawTS(); drawBars(); drawDir(); drawSkel(); drawSkelChips();
   renderChips("landNoteChips",NOTES,()=>S.landNote,v=>S.landNote=v);
   renderChips("degreeChips",DEGREES,()=>S.degree,v=>S.degree=v);
   drawTransport();
@@ -1529,13 +1526,12 @@ bind("addBarBtn",addBar);
 bind("dirUpBtn",()=>dirAdd("↑")); bind("dirDownBtn",()=>dirAdd("↓")); bind("dirFlatBtn",()=>dirAdd("→"));
 bind("dirBackBtn",dirBack); bind("dirClearBtn",dirClear);
 bind("skelBackBtn",skelBack); bind("skelClearBtn",skelClear);
-bind("vOk",()=>setVerdict("ok")); bind("vRe",()=>setVerdict("re"));
 bind("btnTxt",exportTxt); bind("btnNext",saveAndNext);
 bind("playBtn",togglePlay); bind("metBtn",toggleMet);
 bind("speedBox", openSpeedPicker); bind("atSpeedBox", openAtSpeedPicker);
 bind("tabRec",()=>switchView("rec")); bind("tabLib",()=>switchView("lib"));
-window.addEventListener("pagehide", stopPlay);
-document.addEventListener("visibilitychange", ()=>{ if(document.hidden) stopPlay(); });
+window.addEventListener("pagehide", stopAllAudio);
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden) stopAllAudio(); });
 bind("themeBtn",toggleTheme);
 
 /* ================================================================
@@ -1556,13 +1552,37 @@ const player = {
 };
 
 function ensureCtx(){
-  if(!audioCtx){
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if(!AC) return null;
-    audioCtx = new AC();
-  }
-  if(audioCtx.state === "suspended"){ audioCtx.resume(); }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if(!AC) return null;
+  if(audioCtx && audioCtx.state === "closed"){ audioCtx = null; _noiseBuf = null; }
+  if(!audioCtx){ audioCtx = new AC(); _noiseBuf = null; }
+  if(audioCtx.state !== "running"){ try{ audioCtx.resume(); }catch(e){} }
   return audioCtx;
+}
+/* iOS:alphaTab 播放器起自己的 AudioContext 后,本页的会被打断(interrupted/suspended
+   且 resume 可能无效)→ 表现为渲染过谱面后,节奏区播放/节拍器没声。
+   修法:在用户手势里先试 resume,250ms 内救不活就关掉重建一个新的。 */
+function reviveCtx(){
+  return new Promise(res=>{
+    const c = ensureCtx();
+    if(!c){ res(null); return; }
+    if(c.state === "running"){ res(c); return; }
+    let done = false;
+    const finish = ()=>{
+      if(done) return; done = true;
+      if(audioCtx && audioCtx.state === "running"){ res(audioCtx); return; }
+      try{ if(audioCtx) audioCtx.close(); }catch(e){}
+      audioCtx = null; _noiseBuf = null;
+      res(ensureCtx());
+    };
+    try{ Promise.resolve(c.resume()).then(finish, finish); }catch(e){ finish(); }
+    setTimeout(finish, 250);
+  });
+}
+/* 全停:换页/离开页面用;平时两个播放器只在「按下播放」那一刻互斥 */
+function stopAllAudio(){
+  stopPlay();
+  if(typeof at3Stop === "function") at3Stop();
 }
 function baseBpm(){ return S.bpm!==null ? S.bpm : 80; }
 function effBpm(){ return Math.max(20, Math.round(baseBpm() * player.speed / 100)); }
@@ -1659,9 +1679,10 @@ function drawLoop(){
 }
 
 /* -------- 播放控制 -------- */
-function startPlay(){
-  if(typeof at3Stop === "function") at3Stop();
-  if(!ensureCtx()){ toast("此浏览器不支持音频播放"); return; }
+async function startPlay(){
+  if(typeof at3Stop === "function") at3Stop();   /* 播放瞬间互斥:停谱面 */
+  const ctx = await reviveCtx();
+  if(!ctx){ toast("此浏览器不支持音频播放"); return; }
   player.events = buildEvents();
   if(!player.events.length){ toast("先在节奏格里点几个音"); return; }
   player.cells = Array.from(document.querySelectorAll("#barsBox .cell"));
@@ -1675,7 +1696,6 @@ function startPlay(){
   player.rafId = requestAnimationFrame(drawLoop);
 }
 function stopPlay(){
-  if(typeof at3Stop === "function") at3Stop();
   if(!player.playing){
     document.querySelectorAll("#barsBox .cell.playing").forEach(c=>c.classList.remove("playing"));
     return;
@@ -1738,6 +1758,9 @@ const AT_MARKERS2 = [12];                        /* 双点品位标记 */
 const DUR_FOR_SUB = { 1:{v:4}, 2:{v:8}, 3:{v:8,tu:3}, 4:{v:16}, 6:{v:16,tu:6}, 8:{v:32} };
 /* 序列项:{s,f} 品位音 | {s,f,as} 骨架音(带音名) */
 let atNotes = [];
+let atSel = -1;         /* 音序里选中的下标,-1 = 未选中 */
+let atInsert = false;   /* 插入模式:点指板插到选中音之后 */
+const AT_MAX = 64;
 let tapMute = (function(){ try{ return localStorage.getItem("gl-tapmute")==="1"; }catch(e){ return false; } })();
 const at3 = { api:null, rendered:false, sfOk:false, playing:false, fb:null, fbTimer:null,
               speed:100, loop:false, met:false };
@@ -1748,11 +1771,13 @@ function midiOf(s,f){ return AT_TUNING[s-1] + f; }
 function freqOf(midi){ return 440 * Math.pow(2, (midi-69)/12); }
 function previewPitch(s,f){
   if(tapMute) return;
-  if(!ensureCtx()) return;
-  const master = audioCtx.createGain(); master.gain.value = 0.9;
-  master.connect(audioCtx.destination);
-  pluckNote(master, audioCtx.currentTime + 0.01, freqOf(midiOf(s,f)), 0.6);
-  setTimeout(()=>{ try{ master.disconnect(); }catch(e){} }, 900);
+  reviveCtx().then(ctx=>{
+    if(!ctx) return;
+    const master = ctx.createGain(); master.gain.value = 0.9;
+    master.connect(ctx.destination);
+    pluckNote(master, ctx.currentTime + 0.01, freqOf(midiOf(s,f)), 0.6);
+    setTimeout(()=>{ try{ master.disconnect(); }catch(e){} }, 900);
+  });
 }
 function buildFretGrid(){
   const grid = document.getElementById("fretGrid");
@@ -1773,7 +1798,8 @@ function buildFretGrid(){
       if(s===1){ if(AT_MARKERS.indexOf(f)>=0) cls += " marker"; if(AT_MARKERS2.indexOf(f)>=0) cls += " marker2"; }
       c.className = cls;
       c.textContent = noteName(s,f);
-      c.onclick = ()=>{ atNotes.push({s, f}); drawNoteSeq(); flashCell(c); previewPitch(s,f); };
+      c.onclick = ()=>{ if(dragSwallowClick()) return; fretTap(s, f, c); };
+      c.addEventListener("pointerdown", e=>dragArm(e, "new", {s, f}));
       grid.appendChild(c);
     }
   }
@@ -1789,20 +1815,192 @@ function noteLabel(it){
   if(it.as) return it.as + "·" + it.s + "弦" + it.f + "品";
   return noteName(it.s,it.f) + "·" + it.s + "弦" + it.f + "品";
 }
+/* 点指板:未选中=追加;选中=替换;选中+插入模式=插到其后(并顺移选中,可连续插) */
+function fretTap(s, f, cellEl){
+  if(atSel>=0 && atSel<atNotes.length){
+    if(atInsert){
+      if(atNotes.length>=AT_MAX){ toast("音序最多 "+AT_MAX+" 个音"); return; }
+      atNotes.splice(atSel+1, 0, {s, f});
+      atSel = atSel+1;
+    }else{
+      atNotes[atSel] = { s, f };
+    }
+  }else{
+    if(atNotes.length>=AT_MAX){ toast("音序最多 "+AT_MAX+" 个音"); return; }
+    atNotes.push({s, f});
+  }
+  noteSeqChanged();
+  if(cellEl) flashCell(cellEl);
+  previewPitch(s, f);
+}
+/* 音序任何改动统一走这里:夹住选中下标 + 重绘 + 自动入库 */
+function noteSeqChanged(){
+  if(atSel >= atNotes.length){ atSel = -1; atInsert = false; }
+  drawNoteSeq();
+  markDirty();
+}
 function drawNoteSeq(){
   const box = document.getElementById("noteSeq"); if(!box) return;
   box.innerHTML = "";
   atNotes.forEach((it, i)=>{
     const p = document.createElement("span");
-    p.className = "note-pill";
+    p.className = "note-pill" + (i===atSel ? " sel" : "");
+    p.dataset.i = i;
     p.innerHTML = "<span class='n'>" + (i+1) + "</span><span>" + noteLabel(it) + "</span>";
-    p.title = "点击删除这个音";
-    p.onclick = ()=>{ atNotes.splice(i,1); drawNoteSeq(); previewNothing(); };
+    p.title = "点击选中 · 长按拖动排序";
+    p.onclick = ()=>{
+      if(dragSwallowClick()) return;
+      if(atSel===i){ atSel = -1; atInsert = false; }
+      else { atSel = i; atInsert = false; }
+      drawNoteSeq();
+    };
+    p.addEventListener("pointerdown", e=>dragArm(e, "move", i));
     box.appendChild(p);
   });
+  drawNoteEditBar();
   updateAtLink();
 }
-function previewNothing(){}
+function drawNoteEditBar(){
+  const bar = document.getElementById("noteEditBar"); if(!bar) return;
+  const on = atSel>=0 && atSel<atNotes.length;
+  bar.hidden = !on;
+  if(on){
+    const hint = document.getElementById("noteEditHint");
+    if(hint) hint.textContent = "已选中第 " + (atSel+1) + " 音(" + noteLabel(atNotes[atSel]) + ") · "
+      + (atInsert ? "插入模式:点指板会插到它后面" : "点指板 = 替换这个音");
+    const ins = document.getElementById("selInsBtn");
+    if(ins) ins.classList.toggle("on", atInsert);
+  }
+}
+
+/* -------- 长按拖动:音序内排序(move) / 指板拖入(new) --------
+   iPhone Safari:长按 280ms 触发;触发后用非被动 touchmove 挡掉页面滚动。
+   快点 = 原有点击;长按前一动(>10px) = 当作滚动,取消拖拽。 */
+const atDrag = { armed:false, active:false, kind:null, data:null,
+                 x0:0, y0:0, pid:null, timer:null, ghost:null,
+                 overIdx:-1, swallow:false };
+function dragSwallowClick(){
+  if(atDrag.swallow){ atDrag.swallow = false; return true; }
+  return false;
+}
+function _blockScroll(e){ e.preventDefault(); }
+function dragArm(e, kind, data){
+  if(e.pointerType==="mouse" && e.button!==0) return;
+  dragCleanup();
+  atDrag.armed = true; atDrag.kind = kind; atDrag.data = data;
+  atDrag.x0 = e.clientX; atDrag.y0 = e.clientY; atDrag.pid = e.pointerId;
+  atDrag.timer = setTimeout(dragStart, 280);
+  document.addEventListener("pointermove", dragMove, {passive:false});
+  document.addEventListener("pointerup", dragEnd);
+  document.addEventListener("pointercancel", dragCancel);
+}
+function dragStart(){
+  if(!atDrag.armed) return;
+  atDrag.armed = false; atDrag.active = true; atDrag.swallow = true;
+  document.addEventListener("touchmove", _blockScroll, {passive:false});
+  const g = document.createElement("div");
+  g.className = "drag-ghost";
+  if(atDrag.kind==="move"){
+    const it = atNotes[atDrag.data];
+    g.textContent = it ? noteLabel(it) : "";
+    const pill = document.querySelector('#noteSeq .note-pill[data-i="'+atDrag.data+'"]');
+    if(pill) pill.classList.add("dragging");
+  }else{
+    g.textContent = noteName(atDrag.data.s, atDrag.data.f) + "·" + atDrag.data.s + "弦" + atDrag.data.f + "品";
+  }
+  document.body.appendChild(g);
+  atDrag.ghost = g;
+  moveGhost(atDrag.x0, atDrag.y0);
+  atDrag.overIdx = dropIndexAt(atDrag.x0, atDrag.y0);
+  paintDropMark();
+}
+function moveGhost(x,y){
+  if(atDrag.ghost){ atDrag.ghost.style.left = x+"px"; atDrag.ghost.style.top = y+"px"; }
+}
+function dragMove(e){
+  if(e.pointerId!==atDrag.pid) return;
+  if(atDrag.armed){
+    if(Math.abs(e.clientX-atDrag.x0)>10 || Math.abs(e.clientY-atDrag.y0)>10) dragCancel(e);
+    return;
+  }
+  if(!atDrag.active) return;
+  e.preventDefault();
+  moveGhost(e.clientX, e.clientY);
+  atDrag.overIdx = dropIndexAt(e.clientX, e.clientY);
+  paintDropMark();
+}
+/* 指针位置 → 音序插入下标;不在音序框附近返回 -1 */
+function dropIndexAt(x,y){
+  const box = document.getElementById("noteSeq"); if(!box) return -1;
+  const r = box.getBoundingClientRect(), pad = 30;
+  if(x < r.left-pad || x > r.right+pad || y < r.top-pad || y > r.bottom+pad) return -1;
+  const pills = box.querySelectorAll(".note-pill");
+  for(let i=0;i<pills.length;i++){
+    const pr = pills[i].getBoundingClientRect();
+    if(y < pr.top-6 || y > pr.bottom+6) continue;   /* 只按同一行判定 */
+    if(x < pr.left + pr.width/2) return i;
+  }
+  let idx = pills.length;
+  for(let i=0;i<pills.length;i++){
+    const pr = pills[i].getBoundingClientRect();
+    if(y < pr.top-6){ idx = i; break; }             /* 在这行上方 → 插到该行行首 */
+  }
+  return idx;
+}
+function paintDropMark(){
+  const box = document.getElementById("noteSeq"); if(!box) return;
+  const pills = box.querySelectorAll(".note-pill");
+  pills.forEach(p=>p.classList.remove("ins-before","ins-after"));
+  box.classList.remove("drop-end");
+  const k = atDrag.overIdx;
+  if(k<0) return;
+  if(!pills.length){ box.classList.add("drop-end"); return; }
+  if(k>=pills.length) pills[pills.length-1].classList.add("ins-after");
+  else pills[k].classList.add("ins-before");
+}
+function dragEnd(e){
+  if(e.pointerId!==atDrag.pid) return;
+  const wasActive = atDrag.active;
+  const to = atDrag.overIdx, kind = atDrag.kind, data = atDrag.data;
+  dragCleanup();
+  if(!wasActive) return;                 /* 没长按满 = 普通点击 */
+  if(to < 0){ drawNoteSeq(); return; }   /* 拖到框外 = 取消 */
+  if(kind==="move"){
+    const from = data;
+    let t = to;
+    if(from<0 || from>=atNotes.length || t===from || t===from+1){ drawNoteSeq(); return; }
+    const it = atNotes.splice(from,1)[0];
+    if(t>from) t--;
+    atNotes.splice(t,0,it);
+    atSel = -1; atInsert = false;
+    noteSeqChanged();
+  }else{
+    if(atNotes.length>=AT_MAX){ toast("音序最多 "+AT_MAX+" 个音"); drawNoteSeq(); return; }
+    atNotes.splice(to, 0, {s:data.s, f:data.f});
+    atSel = -1; atInsert = false;
+    noteSeqChanged();
+    previewPitch(data.s, data.f);
+  }
+}
+function dragCancel(e){
+  if(e && e.pointerId!==atDrag.pid) return;
+  const wasActive = atDrag.active;
+  dragCleanup();
+  if(wasActive) drawNoteSeq();
+}
+function dragCleanup(){
+  clearTimeout(atDrag.timer); atDrag.timer = null;
+  atDrag.armed = false;
+  if(atDrag.active){ setTimeout(()=>{ atDrag.swallow = false; }, 350); }
+  atDrag.active = false; atDrag.overIdx = -1;
+  if(atDrag.ghost){ atDrag.ghost.remove(); atDrag.ghost = null; }
+  document.removeEventListener("pointermove", dragMove);
+  document.removeEventListener("pointerup", dragEnd);
+  document.removeEventListener("pointercancel", dragCancel);
+  document.removeEventListener("touchmove", _blockScroll);
+  document.querySelectorAll("#noteSeq .note-pill").forEach(p=>p.classList.remove("dragging","ins-before","ins-after"));
+  const box = document.getElementById("noteSeq"); if(box) box.classList.remove("drop-end");
+}
 /* 节奏拨弦位(×)总数 */
 function slotCount(){
   let n = 0;
@@ -1967,17 +2165,15 @@ function at3Stop(){
   if(at3.api && at3.playing){ try{ at3.api.stop(); }catch(e){} at3.playing = false; }
   at3FbStop();
 }
-/* 重做:清空音序 + 清掉已渲染谱面，回到干净状态（保留节奏） */
+/* 重做:只清掉已渲染的谱面,已点音序原样保留(要清音序用「清空」按钮) */
 function at3Reset(){
   at3Stop();
-  atNotes = [];
-  drawNoteSeq();
   if(at3.api){ try{ at3.api.destroy(); }catch(e){} }
   at3.api = null; at3.rendered = false; at3.sfOk = false;
   const wrap = document.getElementById("atWrap");
   if(wrap){ wrap.hidden = true; const mn=document.getElementById("atMain"); if(mn) mn.innerHTML=""; }
-  at3Status("已重做 · 重新点音后再点「渲染谱面」");
-  toast("已清空谱面，可重新点音");
+  at3Status("已清除渲染 · 音序保留,改完再点「渲染谱面」");
+  toast("已清除谱面渲染(音序保留)");
 }
 function at3PlayUI(){
   const b = document.getElementById("atPlayBtn");
@@ -2094,12 +2290,12 @@ function at3ImportSkel(){
   let ok = 0;
   S.skel.forEach(n=>{
     const pc = pcOf[n];
-    if(pc===undefined) return;
+    if(pc===undefined || atNotes.length>=AT_MAX) return;
     const pos = midiToPos(60 + pc);      /* 骨架统一放八度 4 */
     atNotes.push({ s:pos.s, f:pos.f, as:n });
     ok++;
   });
-  drawNoteSeq();
+  noteSeqChanged();
   toast("已导入 " + ok + " 个骨架音");
 }
 
@@ -2114,8 +2310,27 @@ bind("atMetBtn", at3ToggleMet);
 bind("atLoopBtn", at3ToggleLoop);
 bind("skelImportBtn", at3ImportSkel);
 bind("tapMuteBtn", toggleTapMute);
-bind("noteBackBtn", ()=>{ atNotes.pop(); drawNoteSeq(); });
-bind("noteClearBtn", ()=>{ atNotes = []; drawNoteSeq(); });
+bind("noteBackBtn", ()=>{ atNotes.pop(); noteSeqChanged(); });
+let _noteClrArm = null;
+bind("noteClearBtn", ()=>{
+  const b = document.getElementById("noteClearBtn");
+  if(_noteClrArm===null){
+    b.textContent = "再点一次确认清空";
+    _noteClrArm = setTimeout(()=>{ b.textContent = "清空"; _noteClrArm = null; }, 3000);
+    return;
+  }
+  clearTimeout(_noteClrArm); _noteClrArm = null; b.textContent = "清空";
+  atNotes = []; atSel = -1; atInsert = false;
+  noteSeqChanged();
+});
+bind("selInsBtn", ()=>{ if(atSel<0) return; atInsert = !atInsert; drawNoteSeq(); });
+bind("selDelBtn", ()=>{
+  if(atSel<0 || atSel>=atNotes.length) return;
+  atNotes.splice(atSel,1);
+  atSel = -1; atInsert = false;
+  noteSeqChanged();
+});
+bind("selOffBtn", ()=>{ atSel = -1; atInsert = false; drawNoteSeq(); });
 
 /* ---------------- 启动 ---------------- */
 initTheme();
