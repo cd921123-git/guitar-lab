@@ -96,10 +96,12 @@
     --noise:.05;                     /* 颗粒 */
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--body);
+  html{background:var(--bg);transition:background .25s ease}
+  body{margin:0;padding:0;background:transparent;color:var(--body);
     font-family:"Geist",-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
     font-size:16px;line-height:1.55;
-    transition:background .25s ease,color .25s ease}
+    transition:color .25s ease}
+  html,body{margin:0;padding:0}
   /* 环境层:固定的品牌色斑,滚动时玻璃件从其上方掠过,毛玻璃才可见 */
   body::before{content:"";position:fixed;inset:-12%;z-index:-1;pointer-events:none;
     background:
