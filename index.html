@@ -755,12 +755,59 @@
     </div>
   </section>
 
+  <!-- 判定 -->
+  <section>
+    <div class="sec-title"><span class="sec-num">判定</span><span class="sec-name">这条拆完了吗</span></div>
+    <div class="verdict">
+      <button type="button" class="chip ok" id="verdictOkBtn">✓ 拆到骨头 · 骨架本</button>
+      <button type="button" class="chip re" id="verdictReBtn">↻ 装饰没剥净 · 回炉</button>
+    </div>
+  </section>
 
   </div><!-- /viewRec -->
 
   <!-- ================= 乐句库视图 ================= -->
   <div class="view" id="viewLib">
     <div id="reviewPanel"></div>
+
+    <div class="fbar collapsed" id="fbar">
+      <div class="fbar-hd" id="fbarHd">
+        <span class="t">筛选 · 统计</span>
+        <span class="n" id="fbarN"></span>
+        <span class="caret">▾</span>
+      </div>
+      <div class="fbar-body">
+        <div class="fgrid">
+          <div class="fcell wide">
+            <label>来源关键词</label>
+            <input type="text" class="fsrc" id="fSrcInput" placeholder="搜索来源…">
+          </div>
+          <div class="fcell">
+            <label>调</label>
+            <select class="fsel" id="fKeySel"><option value="">全部</option></select>
+          </div>
+          <div class="fcell">
+            <label>判定</label>
+            <select class="fsel" id="fVerdictSel">
+              <option value="">全部</option>
+              <option value="ok">骨架本</option>
+              <option value="re">回炉</option>
+              <option value="wip">进行中</option>
+            </select>
+          </div>
+        </div>
+        <button type="button" class="fclear" id="fClearBtn">清除筛选</button>
+        <div class="stats-title">调式分布（全部乐句）</div>
+        <div id="statsBox"></div>
+      </div>
+    </div>
+
+    <div class="libtools">
+      <button type="button" class="chip" id="backupExportBtn">⬇ 导出备份</button>
+      <button type="button" class="chip" id="backupImportBtn">⬆ 导入备份</button>
+    </div>
+    <input type="file" id="backupFileInput" accept="application/json,.json" hidden>
+
     <p class="libcount" id="libCount"></p>
     <div id="libList"></div>
   </div><!-- /viewLib -->
@@ -998,6 +1045,18 @@ function setToday(){
 document.addEventListener("input", e=>{
   if(e.target.id==="dateVal"){ S.date = e.target.value; markDirty(); }
   if(e.target.id==="srcVal"){ S.src = e.target.value; markDirty(); }
+  if(e.target.id==="fSrcInput"){ libFilter.src = e.target.value.trim().toLowerCase(); renderLib(); }
+});
+document.addEventListener("change", e=>{
+  if(e.target.id==="fKeySel"){ libFilter.key = e.target.value; renderLib(); }
+  if(e.target.id==="fVerdictSel"){ libFilter.verdict = e.target.value; renderLib(); }
+});
+bind("fbarHd", ()=>{ const b=document.getElementById("fbar"); if(b) b.classList.toggle("collapsed"); });
+bind("fClearBtn", ()=>{
+  libFilter.src=""; libFilter.key=""; libFilter.verdict="";
+  const si=document.getElementById("fSrcInput"), ks=document.getElementById("fKeySel"), vs=document.getElementById("fVerdictSel");
+  if(si) si.value=""; if(ks) ks.value=""; if(vs) vs.value="";
+  renderLib();
 });
 function drawKey(){
   const set = v=>{
@@ -1264,6 +1323,48 @@ function exportTxt(){
   const d = (S.date||"").replace(/-/g,"");
   downloadFile(snapshotTXT(), `乐句No${S.num}_${S.key||"X"}调_${d}.txt`, "text/plain");
   toast(`已生成:乐句No${S.num}.txt`);
+}
+
+/* ---------------- JSON 备份 / 导入 ---------------- */
+function downloadJSON(obj, filename){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:"application/json;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 800);
+}
+async function backupExport(){
+  const all = await dbAll();
+  if(!all.length){ toast("库是空的,没有可备份的内容"); return; }
+  const d = new Date(), p = n=>String(n).padStart(2,"0");
+  const stamp = `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+  downloadJSON({ app:"guitar-lab", version:1, exportedAt:Date.now(), phrases:all }, `guitar-lab-备份_${stamp}.json`);
+  toast(`已导出 ${all.length} 条乐句的备份`);
+}
+function backupImportPick(){
+  const input = document.getElementById("backupFileInput");
+  if(input) input.click();
+}
+async function backupImportFile(file){
+  if(!file) return;
+  try{
+    const text = (await file.text()).replace(/^﻿/, "");
+    const data = JSON.parse(text);
+    const phrases = Array.isArray(data) ? data : (data && Array.isArray(data.phrases)) ? data.phrases : null;
+    if(!phrases) throw new Error("bad format");
+    let n = 0;
+    for(const rec of phrases){
+      if(!rec || typeof rec!=="object" || !rec.id) continue;
+      await dbPut(rec);
+      n++;
+    }
+    if(!n) throw new Error("empty");
+    toast(`已导入 ${n} 条乐句(同 ID 已覆盖,其余乐句不受影响)`);
+    renderLib();
+  }catch(e){
+    toast("导入失败:不是有效的备份文件");
+  }
 }
 
 /* ---------------- toast ---------------- */
@@ -1623,18 +1724,68 @@ function libCardEl(rec){
   return c;
 }
 
+/* ---------------- 筛选 · 统计 ---------------- */
+const libFilter = { src:"", key:"", verdict:"" };
+function verdictOf(rec){ return rec.verdict==="ok" ? "ok" : rec.verdict==="re" ? "re" : "wip"; }
+function recMatchesFilter(rec){
+  if(libFilter.key && rec.key !== libFilter.key) return false;
+  if(libFilter.verdict && verdictOf(rec) !== libFilter.verdict) return false;
+  if(libFilter.src && !(rec.src||"").toLowerCase().includes(libFilter.src)) return false;
+  return true;
+}
+function buildKeyFilterOptions(){
+  const sel = document.getElementById("fKeySel");
+  if(!sel || sel.dataset.built) return;
+  sel.dataset.built = "1";
+  [...NOTES, ...MINOR_KEYS].forEach(k=>{
+    const o = document.createElement("option");
+    o.value = k; o.textContent = keyDisp(k);
+    sel.appendChild(o);
+  });
+}
+function drawStats(all){
+  const box = document.getElementById("statsBox");
+  if(!box) return;
+  box.innerHTML = "";
+  const counts = {};
+  all.forEach(r=>{ if(r.key) counts[r.key] = (counts[r.key]||0)+1; });
+  const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length){ box.innerHTML = `<p class="stats-empty">还没有标记调的乐句</p>`; return; }
+  const max = Math.max(...entries.map(e=>e[1]));
+  entries.forEach(([k,n])=>{
+    const row = document.createElement("div"); row.className="stat-row";
+    const lab = document.createElement("span"); lab.className="lab"; lab.textContent=k;
+    const track = document.createElement("span"); track.className="track";
+    const fill = document.createElement("span"); fill.className="fill";
+    fill.style.width = Math.max(4, Math.round(n/max*100)) + "%";
+    track.appendChild(fill);
+    const cnt = document.createElement("span"); cnt.className="cnt"; cnt.textContent=n;
+    row.appendChild(lab); row.appendChild(track); row.appendChild(cnt);
+    box.appendChild(row);
+  });
+}
+function updateFbarCount(){
+  const n = document.getElementById("fbarN");
+  if(!n) return;
+  const active = [libFilter.key, libFilter.verdict, libFilter.src].filter(Boolean).length;
+  n.textContent = active ? `已筛选 ${active}` : "";
+}
+
 async function renderLib(){
   renderReview();
+  buildKeyFilterOptions();
   const list = document.getElementById("libList");
   const all = (await dbAll()).sort((a,b)=>(a.num||0)-(b.num||0));
   const dueN = all.filter(isDue).length;
   const flag = document.getElementById("dueFlag");
   if(flag){ flag.textContent = dueN; flag.classList.toggle("show", dueN>0); }
 
-  document.getElementById("libCount").textContent =
-    all.length ? `共 ${all.length} 条` : "";
+  drawStats(all);
+  updateFbarCount();
+
   list.innerHTML = "";
   if(!all.length){
+    document.getElementById("libCount").textContent = "";
     const e = document.createElement("div"); e.className="empty";
     e.innerHTML = `<svg viewBox="0 0 404.19 445.97"><use href="#mark"/></svg><br>库是空的。`;
     const go = document.createElement("button");
@@ -1647,7 +1798,17 @@ async function renderLib(){
     list.appendChild(e);
     return;
   }
-  all.forEach(rec=>list.appendChild(libCardEl(rec)));
+
+  const shown = all.filter(recMatchesFilter);
+  document.getElementById("libCount").textContent =
+    shown.length!==all.length ? `共 ${all.length} 条 · 筛选出 ${shown.length} 条` : `共 ${all.length} 条`;
+  if(!shown.length){
+    const e = document.createElement("div"); e.className="empty";
+    e.textContent = "没有符合筛选条件的乐句。";
+    list.appendChild(e);
+    return;
+  }
+  shown.forEach(rec=>list.appendChild(libCardEl(rec)));
 }
 
 
@@ -1690,6 +1851,20 @@ function drawAll(){
   renderChips("landNoteChips",NOTES,()=>S.landNote,v=>S.landNote=v);
   renderChips("degreeChips",DEGREES,()=>S.degree,v=>S.degree=v);
   drawTransport();
+  drawVerdict();
+}
+
+/* ---------------- 判定 ---------------- */
+function setVerdict(v){
+  S.verdict = (S.verdict===v) ? null : v;
+  drawVerdict();
+  markDirty();
+}
+function drawVerdict(){
+  const ok = document.getElementById("verdictOkBtn");
+  const re = document.getElementById("verdictReBtn");
+  if(ok) ok.classList.toggle("on", S.verdict==="ok");
+  if(re) re.classList.toggle("on", S.verdict==="re");
 }
 
 /* ---------------- 事件绑定 ---------------- */
@@ -1709,7 +1884,18 @@ bind("addBarBtn",addBar);
 bind("dirUpBtn",()=>dirAdd("↑")); bind("dirDownBtn",()=>dirAdd("↓")); bind("dirFlatBtn",()=>dirAdd("→"));
 bind("dirBackBtn",dirBack); bind("dirClearBtn",dirClear);
 bind("skelBackBtn",skelBack); bind("skelClearBtn",skelClear);
+bind("verdictOkBtn",()=>setVerdict("ok")); bind("verdictReBtn",()=>setVerdict("re"));
 bind("btnTxt",exportTxt); bind("btnNext",saveAndNext);
+bind("backupExportBtn",backupExport); bind("backupImportBtn",backupImportPick);
+(function(){
+  const input = document.getElementById("backupFileInput");
+  if(!input) return;
+  input.addEventListener("change", e=>{
+    const f = e.target.files && e.target.files[0];
+    backupImportFile(f);
+    input.value = "";
+  });
+})();
 bind("playBtn",togglePlay); bind("metBtn",toggleMet);
 bind("speedBox", openSpeedPicker); bind("atSpeedBox", openAtSpeedPicker);
 bind("tabRec",()=>switchView("rec")); bind("tabLib",()=>switchView("lib"));
